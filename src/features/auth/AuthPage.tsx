@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import studioImage from './assets/hero.png'
 import { ApiError, callApi } from '../../shared/api/client'
 import { clearAuthSession, getAuthToken, getAuthUsername, setAuthSession } from '../../shared/auth/session'
 import type { AuthAccount } from '../../shared/auth/types'
@@ -35,6 +34,16 @@ function Brand() {
   )
 }
 
+function PasswordIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2.5 12s3.3-6 9.5-6 9.5 6 9.5 6-3.3 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+      {visible ? null : <path d="m4 4 16 16" />}
+    </svg>
+  )
+}
+
 function App() {
   const [view, setView] = useState<AuthView>('sign-in')
   const [identifier, setIdentifier] = useState('')
@@ -42,6 +51,8 @@ function App() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [account, setAccount] = useState<AuthAccount | null>(null)
   const [isBusy, setIsBusy] = useState(false)
@@ -91,6 +102,8 @@ function App() {
     setSuccessMessage('')
     setPassword('')
     setConfirmPassword('')
+    setPasswordVisible(false)
+    setConfirmPasswordVisible(false)
   }
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
@@ -193,13 +206,28 @@ function App() {
   return (
     <main className="auth-layout">
       <section className="auth-visual" aria-label="Carpenter Pro material studio">
-        <img className="auth-visual-image" src={studioImage} alt="A finished interior showcasing natural materials" />
+       
         <div className="visual-shade" />
         <div className="visual-brand"><Brand /></div>
         <div className="visual-copy">
-          <span>THE MATERIAL, IN ITS PLACE</span>
-          <h1>See the surface.<br />Feel the space.</h1>
-          <p>Thoughtful material previews for better conversations with your clients.</p>
+          <span>CARPENTER PRO</span>
+          <h1>{isSignUp ? 'Get Started with Us' : isSignIn ? 'Welcome Back to Your Studio' : 'Let’s Get You Back In'}</h1>
+          <p>{isSignUp
+            ? 'Complete these steps to register your account.'
+            : isSignIn
+              ? 'Sign in to continue creating thoughtful material previews for your clients.'
+              : 'Follow a few simple steps to return to your material studio.'}</p>
+          <ol className="auth-steps" aria-label="Carpenter account steps">
+            <li className={isSignUp ? 'is-active' : ''}>
+              <span>1</span><strong>Sign up your account</strong>
+            </li>
+            <li>
+              <span>2</span><strong>Set up your workspace</strong>
+            </li>
+            <li className={isSignIn ? 'is-active' : ''}>
+              <span>3</span><strong>Set up your profile</strong>
+            </li>
+          </ol>
         </div>
         <span className="visual-index" aria-hidden="true">01 / 03</span>
       </section>
@@ -208,16 +236,16 @@ function App() {
         <div className="auth-mobile-brand"><Brand /></div>
         <div className="auth-content">
           <span className="auth-kicker">
-            {isSignIn ? 'YOUR MATERIAL STUDIO' : isSignUp ? 'START YOUR STUDIO' : 'ACCOUNT RECOVERY'}
+            {isSignIn ? 'CARPENTER PRO' : isSignUp ? 'NEW ACCOUNT' : 'ACCOUNT RECOVERY'}
           </span>
           <h2>
-            {isSignIn ? 'Welcome back.' : isSignUp ? 'Create your account.' : 'Reset your password.'}
+            {isSignIn ? 'Welcome back' : isSignUp ? 'Sign Up Account' : 'Reset password'}
           </h2>
           <p className="auth-intro">
             {isSignIn
-              ? 'Sign in to continue to your Carpenter workspace.'
+              ? 'Enter your account details to continue.'
               : isSignUp
-                ? 'Set up your account to start creating material previews.'
+                ? 'Enter your personal details to create your Carpenter account.'
                 : 'Enter the username associated with your account and we will send a reset link.'}
           </p>
 
@@ -240,15 +268,26 @@ function App() {
               </label>
               <label className="auth-field">
                 <span>Password</span>
-                <input
-                  type="password"
-                  name="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  required
-                />
+                <span className="password-input-wrap">
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    className="password-visibility"
+                    type="button"
+                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                    aria-pressed={passwordVisible}
+                    onClick={() => setPasswordVisible((visible) => !visible)}
+                  >
+                    <PasswordIcon visible={passwordVisible} />
+                  </button>
+                </span>
               </label>
               <div className="form-options">
                 <label className="remember-control">
@@ -271,56 +310,82 @@ function App() {
 
           {isSignUp ? (
             <form className="auth-form" onSubmit={handleSignUp}>
-              <label className="auth-field">
-                <span>Username</span>
-                <input
-                  type="text"
-                  name="username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="Choose a username"
-                  required
-                />
-              </label>
-              <label className="auth-field">
-                <span>Email address</span>
-                <input
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@company.com"
-                  required
-                />
-              </label>
-              <label className="auth-field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  name="new-password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Create a password"
-                  required
-                />
-              </label>
-              <label className="auth-field">
-                <span>Confirm password</span>
-                <input
-                  type="password"
-                  name="confirm-password"
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  placeholder="Enter your password again"
-                  required
-                />
-              </label>
+              <div className="auth-field-grid">
+                <label className="auth-field">
+                  <span>Username</span>
+                  <input
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Choose a username"
+                    required
+                  />
+                </label>
+                <label className="auth-field">
+                  <span>Email address</span>
+                  <input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@company.com"
+                    required
+                  />
+                </label>
+              </div>
+              <div className="auth-field-grid">
+                <label className="auth-field">
+                  <span>Password</span>
+                  <span className="password-input-wrap">
+                    <input
+                      type={passwordVisible ? 'text' : 'password'}
+                      name="new-password"
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Enter your password"
+                      required
+                    />
+                    <button
+                      className="password-visibility"
+                      type="button"
+                      aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                      aria-pressed={passwordVisible}
+                      onClick={() => setPasswordVisible((visible) => !visible)}
+                    >
+                      <PasswordIcon visible={passwordVisible} />
+                    </button>
+                  </span>
+                </label>
+                <label className="auth-field">
+                  <span>Confirm password</span>
+                  <span className="password-input-wrap">
+                    <input
+                      type={confirmPasswordVisible ? 'text' : 'password'}
+                      name="confirm-password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Confirm your password"
+                      required
+                    />
+                    <button
+                      className="password-visibility"
+                      type="button"
+                      aria-label={confirmPasswordVisible ? 'Hide confirmation password' : 'Show confirmation password'}
+                      aria-pressed={confirmPasswordVisible}
+                      onClick={() => setConfirmPasswordVisible((visible) => !visible)}
+                    >
+                      <PasswordIcon visible={confirmPasswordVisible} />
+                    </button>
+                  </span>
+                </label>
+              </div>
               <button className="submit-button" type="submit" disabled={isBusy}>
-                {isBusy ? <><span className="button-spinner" /> Creating account...</> : <>Create account <span aria-hidden="true">&#8594;</span></>}
+                {isBusy ? <><span className="button-spinner" /> Creating account...</> : <>Sign Up <span aria-hidden="true">&#8594;</span></>}
               </button>
             </form>
           ) : null}
@@ -347,14 +412,14 @@ function App() {
 
           <div className="auth-switch">
             {isSignIn ? (
-              <p>New to Carpenter Pro? <button className="text-button" type="button" onClick={() => changeView('sign-up')}>Create an account</button></p>
+              <p>New to Carpenter Pro? <button className="text-button" type="button" onClick={() => changeView('sign-up')}>Sign up</button></p>
             ) : (
-              <p>Already have an account? <button className="text-button" type="button" onClick={() => changeView('sign-in')}>Back to sign in</button></p>
+                <p>Already have an account? <button className="text-button" type="button" onClick={() => changeView('sign-in')}>Log in</button></p>
             )}
           </div>
           <p className="auth-terms">By continuing, you agree to use Carpenter Pro in accordance with your organization's access policies.</p>
         </div>
-        <footer className="auth-footer"><span>CARPENTER PRO</span><span>Material visualization studio</span></footer>
+        
       </section>
     </main>
   )
