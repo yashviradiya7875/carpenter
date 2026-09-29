@@ -1,0 +1,4845 @@
+{
+  "info": {
+    "_postman_id": "5b1e3c2a-8f0d-4b7e-9a51-5c7d2f0e6a10",
+    "name": "Surus Studio API",
+    "description": "Every endpoint of the Surus Studio backend. Generated from `doc/tools/endpoints.mjs` — see `doc/postman.md`.\n\n**Quick start:** pick the *Surus Studio — Local* environment, set `username` and `password` in it, and send any request. The collection signs in by itself and keeps the JWT in the `authToken` collection variable; `Auth → login` does the same explicitly.\n\nEvery callable is `POST /api/<name>` with `{ \"data\": { … } }`. Requests marked *No Auth* are public.\n\n⚠️ The *AI generation* folder spends real credits and provider quota on every successful call.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// ── Auto-login ─────────────────────────────────────────────────────────",
+          "// Requests marked \"No Auth\" (public endpoints, login itself) skip this.",
+          "const auth = pm.request.auth;",
+          "const isPublic = auth && auth.type === \"noauth\";",
+          "if (!isPublic) {",
+          "    const token = pm.collectionVariables.get(\"authToken\");",
+          "    const expiresAt = Number(pm.collectionVariables.get(\"authTokenExpiresAt\") || 0);",
+          "    const fresh = token && Date.now() < expiresAt - 60 * 1000;",
+          "    const username = pm.variables.get(\"username\");",
+          "    const password = pm.variables.get(\"password\");",
+          "",
+          "    if (!fresh && username && password) {",
+          "        pm.sendRequest({",
+          "            url: pm.variables.replaceIn(\"{{baseUrl}}\") + \"/api/login\",",
+          "            method: \"POST\",",
+          "            header: { \"Content-Type\": \"application/json\" },",
+          "            body: { mode: \"raw\", raw: JSON.stringify({ data: { username: username, password: password } }) }",
+          "        }, function (err, res) {",
+          "            if (err) { console.error(\"Auto-login failed:\", err); return; }",
+          "            let json = {};",
+          "            try { json = res.json(); } catch (e) { /* not JSON */ }",
+          "            if (json.result && json.result.token) {",
+          "                pm.collectionVariables.set(\"authToken\", json.result.token);",
+          "                pm.collectionVariables.set(\"authTokenExpiresAt\", String(jwtExpiry(json.result.token)));",
+          "                pm.collectionVariables.set(\"role\", json.result.role || \"\");",
+          "                console.log(\"Auto-login OK as \" + json.result.username);",
+          "            } else {",
+          "                console.warn(\"Auto-login refused:\", (json.error && json.error.message) || res.status);",
+          "            }",
+          "        });",
+          "    } else if (!fresh) {",
+          "        console.warn(\"No token and no username/password set — set them in the environment or run Auth → login.\");",
+          "    }",
+          "}",
+          "",
+          "// Expiry of a JWT in epoch millis (0 when it can't be read → treated as expired).",
+          "function jwtExpiry(jwt) {",
+          "    try {",
+          "        let part = jwt.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+          "        while (part.length % 4) part += \"=\";",
+          "        return JSON.parse(atob(part)).exp * 1000;",
+          "    } catch (e) {",
+          "        return 0;",
+          "    }",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// ── Envelope check (all requests) ───────────────────────────────────────",
+          "let json = null;",
+          "try { json = pm.response.json(); } catch (e) { /* non-JSON (e.g. an HTML error page) */ }",
+          "",
+          "pm.test(\"Responds with JSON\", function () {",
+          "    pm.expect(json, \"response body is not JSON\").to.not.equal(null);",
+          "});",
+          "",
+          "if (json && json.error) {",
+          "    console.warn(pm.info.requestName + \" → \" + json.error.status + \": \" + json.error.message);",
+          "}",
+          "",
+          "// A rejected token is dropped so the next request signs in again.",
+          "if (pm.response.code === 401 && pm.collectionVariables.get(\"authToken\")) {",
+          "    pm.collectionVariables.set(\"authToken\", \"\");",
+          "    pm.collectionVariables.set(\"authTokenExpiresAt\", \"0\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string",
+      "description": "API origin. Environments override this."
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string",
+      "description": "Account the collection signs in as. Set in the environment."
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string",
+      "description": "Its password. Set in the environment (secret)."
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT — written by login and auto-login. Do not edit."
+    },
+    {
+      "key": "authTokenExpiresAt",
+      "value": "0",
+      "type": "string",
+      "description": "Token expiry, epoch ms. Written by the scripts."
+    },
+    {
+      "key": "role",
+      "value": "",
+      "type": "string",
+      "description": "Role of the signed-in account. Written by the scripts."
+    },
+    {
+      "key": "sampleImageBase64",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "type": "string",
+      "description": "1×1 PNG used where a request needs image bytes."
+    },
+    {
+      "key": "targetUsername",
+      "value": "",
+      "type": "string",
+      "description": "Account used by admin requests (set by register)."
+    },
+    {
+      "key": "organizationId",
+      "value": "",
+      "type": "string",
+      "description": "Org chat room (organization username). login fills it when empty."
+    },
+    {
+      "key": "generationId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by generate* / saveGeneration."
+    },
+    {
+      "key": "folderId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createFolder."
+    },
+    {
+      "key": "shareToken",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createShareLink."
+    },
+    {
+      "key": "collectionId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createCollection."
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by uploadProducts / listProducts."
+    },
+    {
+      "key": "imageId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by getProduct (a face id)."
+    },
+    {
+      "key": "productPageToken",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createProductPage."
+    },
+    {
+      "key": "collectionPageToken",
+      "value": "",
+      "type": "string",
+      "description": "Saved by publishCollectionPage."
+    },
+    {
+      "key": "qrId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createQrCode."
+    },
+    {
+      "key": "qrCode",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createQrCode."
+    },
+    {
+      "key": "productLinkToken",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createProductLink."
+    },
+    {
+      "key": "attemptId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by recordShareAttempt."
+    },
+    {
+      "key": "clientId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by recordShareAttempt."
+    },
+    {
+      "key": "sceneId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by listCarpenterScenes / createCarpenterScene."
+    },
+    {
+      "key": "tileCollectionId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by saveTileCollection."
+    },
+    {
+      "key": "tileSizeValue",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createTileSize."
+    },
+    {
+      "key": "promptId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by createMasterPrompt."
+    },
+    {
+      "key": "packageId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by getPackages / createPackage."
+    },
+    {
+      "key": "errorLogId",
+      "value": "",
+      "type": "string",
+      "description": "Saved by getErrorLogs."
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & discovery",
+      "description": "Plain GET routes outside the callable contract. No auth.",
+      "item": [
+        {
+          "name": "health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Liveness + database check.\n\n\n**Auth:** Public — no token\n\n**Returns:** `{ ok, db: \"up\" | \"down\", env }` — 503 when MySQL is unreachable.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "__callables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/__callables",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "__callables"
+              ]
+            },
+            "description": "Every callable name this deployment serves.\n\n\n**Auth:** Public — no token\n\n**Returns:** `{ callables: string[] }` (sorted).\n\n**Notes:** Use it to confirm a deploy exposes what the client calls.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Sign-in, sign-up and account creation. `login` and `signup` return a JWT that the collection stores in `{{authToken}}` automatically.",
+      "item": [
+        {
+          "name": "login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "login"
+              ]
+            },
+            "description": "Sign in and receive a JWT.\n\n\n**Auth:** Public — no token\n\n**Required:** `username`, `password`\n\n**Returns:** The user record (`username`, `role`, `credits`, `allowedApps`, `resolution`, …) plus `capabilities`, `carpenterAccount` and `token`.\n\n**Notes:** Rate limited: 30 attempts / 15 min per IP. Errors: `not-found` (unknown user), `unauthenticated` (wrong password).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Store the token for every other request (Bearer {{authToken}}).",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "pm.test(\"Login returned a token\", function () {",
+                  "    pm.expect(body && body.result && body.result.token, \"no token in result\").to.be.a(\"string\");",
+                  "});",
+                  "if (body && body.result && body.result.token) {",
+                  "    const token = body.result.token;",
+                  "    let exp = 0;",
+                  "    try {",
+                  "        let part = token.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+                  "        while (part.length % 4) part += \"=\";",
+                  "        exp = JSON.parse(atob(part)).exp * 1000;",
+                  "    } catch (e) { /* leave 0 → treated as expired */ }",
+                  "    pm.collectionVariables.set(\"authToken\", token);",
+                  "    pm.collectionVariables.set(\"authTokenExpiresAt\", String(exp));",
+                  "    pm.collectionVariables.set(\"role\", body.result.role || \"\");",
+                  "    // Org chat room: the member's organization, or the organization itself.",
+                  "    if (!pm.collectionVariables.get(\"organizationId\")) {",
+                  "        pm.collectionVariables.set(\"organizationId\", body.result.organizationId || body.result.username);",
+                  "    }",
+                  "    console.log(\"Signed in as \" + body.result.username + \" (\" + body.result.role + \")\");",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "signup"
+              ]
+            },
+            "description": "Self sign-up — creates a `user` pending approval.\n\n\n**Auth:** Public — no token\n\n**Required:** `username`, `password`\n\n**Returns:** The new user record plus `token`, like `login`.\n\n**Notes:** Account starts `accountStatus: \"pending_approval\"` with `DEFAULT_APPS`. Sends a verification email when SMTP is configured. Rate limited like `login`. In Postman the returned token is *not* stored — the collection stays signed in as `{{username}}`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"newuser\",\n    \"password\": \"a-strong-password\",\n    \"email\": \"newuser@example.com\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "register"
+              ]
+            },
+            "description": "Admin / bootlegar / organization creates another account.\n\n\n**Auth:** admin · bootlegar · organization\n\n**Required:** `username`, `password`\n\n**Returns:** The created user (`username`, `role`, `credits`, `allowedApps`, `resolution`, `organizationId`, `capabilities`, …).\n\n**Notes:** An organization always creates `org_user` members of itself. A bootlegar pays `initialCredits` from its own balance. Carpenter onboarding: see docs/carpenter-onboarding.md (Manufacturer = `organization`, Dealer Pro = `user`, Sponsored dealer = `org_user` + `organizationId`).\n\n**Saves:** `{{targetUsername}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"username\": \"dealer_one\",\n    \"password\": \"a-strong-password\",\n    \"role\": \"user\",\n    \"displayName\": \"Dealer One\",\n    \"initialCredits\": 20,\n    \"resolution\": \"2K\",\n    \"allowedApps\": [\n      \"CARPENTER\"\n    ],\n    \"organizationId\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const targetUsernameValue = get(body.result, \"username\");",
+                  "    if (targetUsernameValue != null && targetUsernameValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"targetUsername\", String(targetUsernameValue));",
+                  "        console.log(\"targetUsername = \" + targetUsernameValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "verifyEmail",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verifyEmail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verifyEmail"
+              ]
+            },
+            "description": "Confirm an email address from the signup link.\n\n\n**Auth:** Public — no token\n\n**Required:** `username`, `token`\n\n**Returns:** `{ success, message }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"newuser\",\n    \"token\": \"<token from the email link>\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "forgotPassword",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/forgotPassword",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "forgotPassword"
+              ]
+            },
+            "description": "Email a password-reset link.\n\n\n**Auth:** Public — no token\n\n**Required:** `username`\n\n**Returns:** `{ success, message }`.\n\n**Notes:** Needs SMTP configured. Rate limited.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "resetPassword",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resetPassword",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resetPassword"
+              ]
+            },
+            "description": "Set a new password with a reset token.\n\n\n**Auth:** Public — no token\n\n**Required:** `username`, `token`, `newPassword`\n\n**Returns:** `{ success, message }`.\n\n**Notes:** Errors: `permission-denied` for an invalid or expired token. Rate limited.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"<token from the email link>\",\n    \"newPassword\": \"a-new-password\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users & credits",
+      "description": "Profiles, account management and credit balances.",
+      "item": [
+        {
+          "name": "getCurrentUser",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getCurrentUser",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCurrentUser"
+              ]
+            },
+            "description": "The signed-in user, with the org's credit pool for org members.\n\n\n**Auth:** Signed in\n\n**Returns:** User record + `capabilities` + `carpenterAccount`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getUsers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getUsers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getUsers"
+              ]
+            },
+            "description": "List users — all for an admin, own creations for a bootlegar / organization.\n\n\n**Auth:** admin · bootlegar · organization\n\n**Returns:** Array of users (passwords never included).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateUser",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateUser",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateUser"
+              ]
+            },
+            "description": "Change another user's role, credits, apps, resolution or password.\n\n\n**Auth:** admin · bootlegar · organization\n\n**Required:** `targetUsername`\n\n**Returns:** `{ success }`.\n\n**Notes:** Allowed keys: `role`, `credits`, `allowedApps`, `resolution` (`1K` | `2K` | `4K`), `password`. Bootlegars / organizations may only touch accounts they created and never change roles; bootlegars also cannot change apps or resolution.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"targetUsername\": \"{{targetUsername}}\",\n    \"updates\": {\n      \"credits\": 50,\n      \"resolution\": \"2K\",\n      \"allowedApps\": [\n        \"CARPENTER\",\n        \"QR_GEN_PRO\"\n      ]\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateUserProfile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateUserProfile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateUserProfile"
+              ]
+            },
+            "description": "Own display name, share-message preset and (organization) logo.\n\n\n**Auth:** Signed in\n\n**Returns:** The updated profile fields.\n\n**Notes:** Only organizations and admins can set a logo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"displayName\": \"Suru Laminates\",\n    \"shareMessagePreset\": \"Here is your render from Suru Studio\",\n    \"logoBase64\": \"{{sampleImageBase64}}\",\n    \"logoMimeType\": \"image/png\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getUserCredits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getUserCredits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getUserCredits"
+              ]
+            },
+            "description": "Current balance (an org member sees the org's pool).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ credits }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deductCredits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deductCredits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deductCredits"
+              ]
+            },
+            "description": "Spend credits for work done outside the AI routes.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `amount`\n\n**Returns:** `{ success }` — `failed-precondition` when the balance is too low.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "addCredits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/addCredits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "addCredits"
+              ]
+            },
+            "description": "Grant credits (admin mints; bootlegar transfers its own).\n\n\n**Auth:** admin · bootlegar\n\n**Required:** `targetUsername`, `amount`\n\n**Returns:** `{ success, newCredits }`.\n\n**Notes:** A bootlegar may only top up accounts it created.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"targetUsername\": \"{{targetUsername}}\",\n    \"amount\": 10\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setUserCredits",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setUserCredits",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setUserCredits"
+              ]
+            },
+            "description": "Set an exact balance.\n\n\n**Auth:** admin only\n\n**Required:** `targetUsername`, `amount`\n\n**Returns:** `{ success, credits }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"targetUsername\": \"{{targetUsername}}\",\n    \"amount\": 100\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI generation",
+      "description": "Every generate* call prices the account's resolution, spends credits, calls the configured image provider (Gemini or OpenAI), stores the render and saves a generation record — refunding on any failure. **Each successful call costs real credits and provider spend.** Rate limited: 20 / minute per IP. Images travel as base64 (no data: prefix) with a mimeType; catalog images can be sent as `{ \"imageId\": \"<product image id>\" }` instead.",
+      "item": [
+        {
+          "name": "generateSuruShot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateSuruShot",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateSuruShot"
+              ]
+            },
+            "description": "Product photography from one product photo.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `imageBase64`\n\n**Returns:** `{ success, imageUrl, generationId }` — `imageUrl` is a data URL of the render.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"imageBase64\": \"{{sampleImageBase64}}\",\n    \"imageMimeType\": \"image/png\",\n    \"prompt\": \"On a marble counter, soft window light\",\n    \"aspectRatio\": \"1:1\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateTileMaster",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateTileMaster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateTileMaster"
+              ]
+            },
+            "description": "Tile the mapped surfaces of the user's own room photo.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `imageBase64`, `originalImageBase64`\n\n**Returns:** `{ success, imageUrl, generationId }`.\n\n**Notes:** Image order is fixed: [original photo, surfaces-only tile layer (`imageBase64`), ...tileImages]. `tileImageIds` on a surface are 1-based positions in `tileImages`.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"originalImageBase64\": \"{{sampleImageBase64}}\",\n    \"originalImageMimeType\": \"image/png\",\n    \"imageBase64\": \"{{sampleImageBase64}}\",\n    \"imageMimeType\": \"image/png\",\n    \"tileImages\": [\n      {\n        \"imageId\": \"{{imageId}}\"\n      }\n    ],\n    \"surfaces\": [\n      {\n        \"label\": \"Floor\",\n        \"plane\": \"floor\",\n        \"tileSize\": \"600x600\",\n        \"tileImageIds\": [\n          1\n        ],\n        \"cols\": 8,\n        \"rows\": 6,\n        \"corners\": [\n          {\n            \"x\": 0.1,\n            \"y\": 0.6\n          },\n          {\n            \"x\": 0.9,\n            \"y\": 0.6\n          },\n          {\n            \"x\": 1,\n            \"y\": 1\n          },\n          {\n            \"x\": 0,\n            \"y\": 1\n          }\n        ]\n      }\n    ],\n    \"tileSize\": \"600x600\",\n    \"groutColor\": \"#d9d9d9\",\n    \"groutThicknessMm\": 2,\n    \"harmonizeDecor\": false,\n    \"creativeMode\": false,\n    \"aspectRatio\": \"16:9\",\n    \"scene\": {\n      \"name\": \"Living room\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateCarpenter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateCarpenter",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateCarpenter"
+              ]
+            },
+            "description": "Laminate on furniture — preset room or the user's own photo.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `laminateBase64 or laminateImageId`\n\n**Returns:** `{ success, imageUrl, generationId, … }` plus Carpenter branding fields for sponsored dealers.\n\n**Notes:** Scene: `sceneId` renders onto a library scene (see Carpenter scenes) — its image is read server-side and its ratio is the default `aspectRatio`; `sceneImageBase64` renders onto an uploaded room photo and wins over `sceneId`; with neither, `scene.name` / `scene.prompt` describe a room to invent. Use `laminateImageId` / `accentLaminateImageId` to render a catalog laminate by product-image id. `accentRegions` (0–1 boxes `{x,y,w,h}`) apply to any real photo (upload or library scene); `decorateRoom` only to uploads.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"laminateBase64\": \"{{sampleImageBase64}}\",\n    \"laminateMimeType\": \"image/png\",\n    \"accentLaminateBase64\": null,\n    \"accentLaminateMimeType\": null,\n    \"sceneId\": \"{{sceneId}}\",\n    \"sceneImageBase64\": null,\n    \"sceneImageMimeType\": null,\n    \"scene\": {\n      \"name\": \"Modern wardrobe\",\n      \"prompt\": \"Floor-to-ceiling wardrobe, handleless shutters\"\n    },\n    \"accentRegions\": [],\n    \"decorateRoom\": false,\n    \"creativeMode\": false,\n    \"prompt\": \"\",\n    \"aspectRatio\": \"4:3\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateMarbleX",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateMarbleX",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateMarbleX"
+              ]
+            },
+            "description": "Marble slab on floor / walls, preset room or own photo.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `marbleBase64`\n\n**Returns:** `{ success, imageUrl, generationId }`.\n\n**Notes:** `target`: `floor` | `walls` | `both`.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"marbleBase64\": \"{{sampleImageBase64}}\",\n    \"marbleMimeType\": \"image/png\",\n    \"sceneImageBase64\": null,\n    \"sceneImageMimeType\": null,\n    \"target\": \"floor\",\n    \"flow\": \"bookmatch\",\n    \"scene\": {\n      \"name\": \"Lobby\"\n    },\n    \"prompt\": \"\",\n    \"creativeMode\": false,\n    \"aspectRatio\": \"16:9\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateHardware",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateHardware",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateHardware"
+              ]
+            },
+            "description": "Door hardware installed on a door, optionally in a reference scene.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `imageBase64`\n\n**Returns:** `{ success, imageUrl, generationId }`.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"imageBase64\": \"{{sampleImageBase64}}\",\n    \"imageMimeType\": \"image/png\",\n    \"referenceImageBase64\": null,\n    \"referenceImageMimeType\": null,\n    \"scene\": {\n      \"name\": \"Modern door\"\n    },\n    \"prompt\": \"\",\n    \"creativeMode\": false,\n    \"aspectRatio\": \"3:4\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateJigsaw",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateJigsaw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateJigsaw"
+              ]
+            },
+            "description": "Product studio shot (Jigsaw AI; BathExpert with tool=BATH_EXPERT).\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `imageBase64`\n\n**Returns:** `{ success, imageUrl, generationId }`.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"imageBase64\": \"{{sampleImageBase64}}\",\n    \"imageMimeType\": \"image/png\",\n    \"tool\": \"JIGSAW\",\n    \"productId\": \"Basin mixer\",\n    \"composition\": {\n      \"cameraAngle\": \"Eye level\",\n      \"zoom\": \"Medium\"\n    },\n    \"atmosphere\": {\n      \"lighting\": \"Soft daylight\",\n      \"shadows\": \"Soft\"\n    },\n    \"environment\": {\n      \"type\": \"Preset\",\n      \"preset\": \"Minimal bathroom\",\n      \"customPrompt\": \"\"\n    },\n    \"decorativeElements\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateGodPosters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateGodPosters",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateGodPosters"
+              ]
+            },
+            "description": "Devotional poster art.\n\n\n**Auth:** Signed in\n\n**Required:** `username`\n\n**Returns:** `{ success, imageUrl, generationId }`.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"deityCategory\": \"Ganesha\",\n    \"customDeity\": \"\",\n    \"posterStyle\": \"Traditional\",\n    \"blessingText\": \"Shubh Labh\",\n    \"mantraText\": \"\",\n    \"prompt\": \"\",\n    \"imageBase64\": null,\n    \"imageMimeType\": null,\n    \"aspectRatio\": \"3:4\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"generationId\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "generateCreativeBrief",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/generateCreativeBrief",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "generateCreativeBrief"
+              ]
+            },
+            "description": "Text-only prompt helper (\"enhance my prompt\") — no credits.\n\n\n**Auth:** Signed in\n\n**Required:** `config`\n\n**Returns:** `{ text }` — a stock brief when no Gemini key is configured.\n\n**Notes:** Always uses Gemini's text model. Rate limited like generations.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"config\": {\n      \"productId\": \"Basin mixer\",\n      \"composition\": {\n        \"cameraAngle\": \"Eye level\",\n        \"aspectRatio\": \"1:1\"\n      },\n      \"atmosphere\": {\n        \"lighting\": \"Soft\",\n        \"shadows\": \"Soft\"\n      },\n      \"environment\": {\n        \"type\": \"Preset\",\n        \"preset\": \"Minimal bathroom\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Generations",
+      "description": "Stored render records (what Files and the admin records view list).",
+      "item": [
+        {
+          "name": "saveGeneration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/saveGeneration",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "saveGeneration"
+              ]
+            },
+            "description": "Save a record for an image the client produced itself.\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `tool`, `imageUrl`\n\n**Returns:** The saved generation record.\n\n**Saves:** `{{generationId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"tool\": \"CARPENTER\",\n    \"imageUrl\": \"https://example.com/render.webp\",\n    \"baseImageUrl\": null,\n    \"prompt\": \"Saved from editor\",\n    \"settings\": \"{\\\"kind\\\":\\\"render\\\"}\",\n    \"creditsUsed\": 0\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const generationIdValue = get(body.result, \"id\");",
+                  "    if (generationIdValue != null && generationIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"generationId\", String(generationIdValue));",
+                  "        console.log(\"generationId = \" + generationIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getGenerations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getGenerations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getGenerations"
+              ]
+            },
+            "description": "Own records, or any user's when the caller is admin.\n\n\n**Auth:** Signed in\n\n**Returns:** Array of generation records, newest first.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"filterUsername\": \"{{username}}\",\n    \"limit\": 50\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateGenerationImage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateGenerationImage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateGenerationImage"
+              ]
+            },
+            "description": "Replace a record's image with a client-side composite.\n\n\n**Auth:** Signed in\n\n**Required:** `generationId`, `base64Image`\n\n**Returns:** `{ success, imageUrl }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"generationId\": \"{{generationId}}\",\n    \"base64Image\": \"{{sampleImageBase64}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Files (Drive)",
+      "description": "Folders, files (generations), favorites, sharing and share links.",
+      "item": [
+        {
+          "name": "createFolder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createFolder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createFolder"
+              ]
+            },
+            "description": "Create a folder (at Home when parentId is null).\n\n\n**Auth:** Signed in\n\n**Required:** `username`, `name`\n\n**Returns:** The folder, with `myRole: \"owner\"`.\n\n**Saves:** `{{folderId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"name\": \"Client renders\",\n    \"parentId\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const folderIdValue = get(body.result, \"id\");",
+                  "    if (folderIdValue != null && folderIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"folderId\", String(folderIdValue));",
+                  "        console.log(\"folderId = \" + folderIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getFileSystem",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getFileSystem",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getFileSystem"
+              ]
+            },
+            "description": "Folders and files visible to the user in one folder, or a search.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ folders, files }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"parentId\": null,\n    \"search\": \"\",\n    \"favoritesOnly\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "renameResource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renameResource",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renameResource"
+              ]
+            },
+            "description": "Rename a file or folder (editor access).\n\n\n**Auth:** Signed in\n\n**Required:** `resourceId`, `resourceType`, `newName`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": \"{{folderId}}\",\n    \"resourceType\": \"folder\",\n    \"newName\": \"Renamed folder\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "moveFile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/moveFile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "moveFile"
+              ]
+            },
+            "description": "Move a file into a folder (null = Home).\n\n\n**Auth:** Signed in\n\n**Required:** `fileId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"fileId\": \"{{generationId}}\",\n    \"folderId\": \"{{folderId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "moveFolder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/moveFolder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "moveFolder"
+              ]
+            },
+            "description": "Move a folder under another (cycle-protected).\n\n\n**Auth:** Signed in\n\n**Required:** `folderId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"folderId\": \"{{folderId}}\",\n    \"newParentId\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "toggleFavorite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/toggleFavorite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "toggleFavorite"
+              ]
+            },
+            "description": "Star / unstar a file or folder.\n\n\n**Auth:** Signed in\n\n**Required:** `resourceId`, `resourceType`\n\n**Returns:** `{ success, isFavorite }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": \"{{folderId}}\",\n    \"resourceType\": \"folder\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "shareResource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shareResource",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shareResource"
+              ]
+            },
+            "description": "Share with users and/or set visibility (owner / admin role).\n\n\n**Auth:** Signed in\n\n**Required:** `resourceId`, `resourceType`\n\n**Returns:** `{ success }`.\n\n**Notes:** `visibility`: `private` | `organization` | `public`. `permissions` maps username → `admin` | `editor` | `viewer`; `sharedWith` is the legacy viewer-only list.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": \"{{folderId}}\",\n    \"resourceType\": \"folder\",\n    \"visibility\": \"private\",\n    \"permissions\": {\n      \"{{targetUsername}}\": \"viewer\"\n    },\n    \"sharedWith\": []\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getResourceShares",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getResourceShares",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getResourceShares"
+              ]
+            },
+            "description": "Who a resource is shared with (share dialog).\n\n\n**Auth:** Signed in\n\n**Required:** `resourceId`, `resourceType`\n\n**Returns:** The share list with roles and visibility.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": \"{{folderId}}\",\n    \"resourceType\": \"folder\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "createShareLink",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createShareLink",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createShareLink"
+              ]
+            },
+            "description": "Create or rotate a public share link.\n\n\n**Auth:** Signed in\n\n**Required:** `resourceId`, `resourceType`\n\n**Returns:** `{ token, role }` — the SPA link is `APP_PUBLIC_URL/share/<token>`.\n\n**Saves:** `{{shareToken}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": \"{{folderId}}\",\n    \"resourceType\": \"folder\",\n    \"linkRole\": \"viewer\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const shareTokenValue = get(body.result, \"token\");",
+                  "    if (shareTokenValue != null && shareTokenValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"shareToken\", String(shareTokenValue));",
+                  "        console.log(\"shareToken = \" + shareTokenValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getSharedResource",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getSharedResource",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getSharedResource"
+              ]
+            },
+            "description": "Resolve a share-link token.\n\n\n**Auth:** Public — no token\n\n**Required:** `token`\n\n**Returns:** `{ resource, resourceType, role }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"token\": \"{{shareToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "revokeShareLink",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/revokeShareLink",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "revokeShareLink"
+              ]
+            },
+            "description": "Revoke a share link you created.\n\n\n**Auth:** Signed in\n\n**Required:** `token`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"{{shareToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getActivity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getActivity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getActivity"
+              ]
+            },
+            "description": "Activity for a resource, the caller's recent activity, or Carpenter share attempts.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ activity: [...] }`.\n\n**Notes:** `kind: \"shareAttempts\"` returns Carpenter share attempts (with client + follow-up date) instead of Drive activity.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resourceId\": null,\n    \"limit\": 50,\n    \"kind\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Catalog (collections & products)",
+      "description": "The tile / laminate library: collections → products → faces (images). Uploading a product auto-publishes its public page and QR.",
+      "item": [
+        {
+          "name": "createCollection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createCollection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createCollection"
+              ]
+            },
+            "description": "Create a tile or laminate collection.\n\n\n**Auth:** Signed in\n\n**Required:** `name`\n\n**Returns:** The collection (`id`, `name`, `type`, `owner`, `isShared`, `productCount`, …).\n\n**Saves:** `{{collectionId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"name\": \"Postman Laminates\",\n    \"type\": \"laminate\",\n    \"description\": \"Created from Postman\",\n    \"isShared\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const collectionIdValue = get(body.result, \"id\");",
+                  "    if (collectionIdValue != null && collectionIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"collectionId\", String(collectionIdValue));",
+                  "        console.log(\"collectionId = \" + collectionIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "listCollections",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listCollections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listCollections"
+              ]
+            },
+            "description": "Collections visible to the user (own + shared; org members see their manufacturer's).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ collections, total, page, pageSize, hasMore }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"type\": \"laminate\",\n    \"page\": 1,\n    \"pageSize\": 40,\n    \"search\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateCollection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateCollection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateCollection"
+              ]
+            },
+            "description": "Rename, describe or share a collection you own.\n\n\n**Auth:** Signed in\n\n**Required:** `collectionId`\n\n**Returns:** The updated collection.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"collectionId\": \"{{collectionId}}\",\n    \"name\": \"Postman Laminates (renamed)\",\n    \"description\": \"Updated\",\n    \"isShared\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "uploadProducts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/uploadProducts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "uploadProducts"
+              ]
+            },
+            "description": "Bulk upload images into a collection (multipart/form-data).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ success, collection, productsCreated, productsUpdated, facesStored, skipped, products, publications }`.\n\n**Notes:** Limits: MAX_UPLOAD_MB per file (default 25), MAX_UPLOAD_FILES per request (default 200). Loose files sharing a base name with a trailing token (`oak_x.png`, `oak_y.png`) become one product with two faces. Re-uploading a name merges into the existing product.\n\n**Saves:** `{{productId}}`",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "One or more images (repeat the key). Pick files in Postman before sending."
+                },
+                {
+                  "key": "collectionId",
+                  "value": "{{collectionId}}",
+                  "type": "text",
+                  "description": "Existing collection — or send collectionName instead."
+                },
+                {
+                  "key": "collectionName",
+                  "value": "",
+                  "type": "text",
+                  "description": "Name to create/reuse when collectionId is empty.",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "laminate",
+                  "type": "text",
+                  "description": "tile | laminate"
+                },
+                {
+                  "key": "paths",
+                  "value": "[]",
+                  "type": "text",
+                  "description": "JSON array of webkitRelativePath per file (folder uploads → one product per folder)."
+                },
+                {
+                  "key": "autoPublish",
+                  "value": "1",
+                  "type": "text",
+                  "description": "\"0\" skips creating each product's public page + QR."
+                },
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "type": "text",
+                  "description": "Ignored when a Bearer token is sent."
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const productIdValue = get(body.result, \"products.0.id\");",
+                  "    if (productIdValue != null && productIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"productId\", String(productIdValue));",
+                  "        console.log(\"productId = \" + productIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "listProducts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listProducts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listProducts"
+              ]
+            },
+            "description": "Paginated products of a collection (cover thumbnails only).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ products, total, page, pageSize, hasMore }`.\n\n**Saves:** `{{productId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"collectionId\": \"{{collectionId}}\",\n    \"type\": \"laminate\",\n    \"page\": 1,\n    \"pageSize\": 40,\n    \"search\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const productIdValue = get(body.result, \"products.0.id\");",
+                  "    if (productIdValue != null && productIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"productId\", String(productIdValue));",
+                  "        console.log(\"productId = \" + productIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getProduct",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getProduct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getProduct"
+              ]
+            },
+            "description": "One product with all of its faces.\n\n\n**Auth:** Signed in\n\n**Required:** `productId`\n\n**Returns:** `{ product: { …, images: [{ id, face, url, thumbUrl, … }] } }`.\n\n**Notes:** An image `id` from here is what generation calls accept as `{ imageId }`.\n\n**Saves:** `{{imageId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productId\": \"{{productId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const imageIdValue = get(body.result, \"product.images.0.id\");",
+                  "    if (imageIdValue != null && imageIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"imageId\", String(imageIdValue));",
+                  "        console.log(\"imageId = \" + imageIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getProductImages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getProductImages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getProductImages"
+              ]
+            },
+            "description": "Faces for several products at once.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ products: [{ id, images }] }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productIds\": [\n      \"{{productId}}\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "renameProduct",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/renameProduct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "renameProduct"
+              ]
+            },
+            "description": "Rename a product (unique within its collection).\n\n\n**Auth:** Signed in\n\n**Required:** `productId`, `name`\n\n**Returns:** The updated product.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productId\": \"{{productId}}\",\n    \"name\": \"Natural Oak\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "QR-Gen-Pro",
+      "description": "Public product pages (`/product/<token>`), public collection pages (`/collection/<token>`) and dynamic QR codes (`/q/<code>`) that can be re-pointed at either without reprinting.",
+      "item": [
+        {
+          "name": "createProductPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createProductPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createProductPage"
+              ]
+            },
+            "description": "Publish a product's page (reuses its live page if it has one).\n\n\n**Auth:** Signed in\n\n**Required:** `productId`\n\n**Returns:** Page summary (`token`, `url`, `name`, `category`, `size`, `coverUrl`, `views`, `revoked`, …) + `reused`.\n\n**Saves:** `{{productPageToken}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productId\": \"{{productId}}\",\n    \"title\": \"Natural Oak\",\n    \"category\": \"Laminates\",\n    \"size\": \"8x4 ft\",\n    \"description\": \"1mm matte finish\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const productPageTokenValue = get(body.result, \"token\");",
+                  "    if (productPageTokenValue != null && productPageTokenValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"productPageToken\", String(productPageTokenValue));",
+                  "        console.log(\"productPageToken = \" + productPageTokenValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getProductPublications",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getProductPublications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getProductPublications"
+              ]
+            },
+            "description": "Pages + QRs for a batch of products.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ publications: [{ productId, page, qrCodes, pageCreated, qrCreated }] }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productIds\": [\n      \"{{productId}}\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "publishProducts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/publishProducts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "publishProducts"
+              ]
+            },
+            "description": "Give each product a page + QR (idempotent).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ publications }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productIds\": [\n      \"{{productId}}\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getProductPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getProductPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getProductPage"
+              ]
+            },
+            "description": "Resolve a product page (counts a view).\n\n\n**Auth:** Public — no token\n\n**Required:** `token`\n\n**Returns:** The page snapshot: `name`, `type`, `category`, `size`, `collectionName`, `description`, `images`, `owner`, `views`, …",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"token\": \"{{productPageToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "listProductPages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listProductPages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listProductPages"
+              ]
+            },
+            "description": "Your product pages.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ pages, total, hasMore }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"page\": 1,\n    \"pageSize\": 40,\n    \"search\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateProductPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateProductPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateProductPage"
+              ]
+            },
+            "description": "Edit a page's details or disable it.\n\n\n**Auth:** Signed in\n\n**Required:** `token`\n\n**Returns:** Page summary.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"{{productPageToken}}\",\n    \"category\": \"Premium laminates\",\n    \"size\": \"8x4 ft\",\n    \"description\": \"Updated from Postman\",\n    \"revoked\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "publishCollectionPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/publishCollectionPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "publishCollectionPage"
+              ]
+            },
+            "description": "Public link + QR for a whole collection (idempotent).\n\n\n**Auth:** Signed in\n\n**Required:** `collectionId`\n\n**Returns:** `{ token, url, collectionId, name, views, revoked, reused, qrCodes }`.\n\n**Notes:** Also publishes any product in the collection that has no page yet.\n\n**Saves:** `{{collectionPageToken}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"collectionId\": \"{{collectionId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const collectionPageTokenValue = get(body.result, \"token\");",
+                  "    if (collectionPageTokenValue != null && collectionPageTokenValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"collectionPageToken\", String(collectionPageTokenValue));",
+                  "        console.log(\"collectionPageToken = \" + collectionPageTokenValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getCollectionPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getCollectionPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCollectionPage"
+              ]
+            },
+            "description": "Resolve a collection page — every product, live.\n\n\n**Auth:** Public — no token\n\n**Required:** `token`\n\n**Returns:** `{ token, name, type, description, owner, views, productCount, products: [{ id, token, name, category, size, images, … }] }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"token\": \"{{collectionPageToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateCollectionPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateCollectionPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateCollectionPage"
+              ]
+            },
+            "description": "Disable / re-enable a collection link.\n\n\n**Auth:** Signed in\n\n**Required:** `token`\n\n**Returns:** Collection page summary.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"{{collectionPageToken}}\",\n    \"revoked\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "createQrCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createQrCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createQrCode"
+              ]
+            },
+            "description": "Create 1–50 QR codes, optionally mapped to a page.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ qrCodes: [{ id, code, url, label, targetToken, targetType, target, collectionTarget, scans, … }] }`.\n\n**Notes:** `targetType`: `product` (default) | `collection` — with `collection`, `targetToken` is a collection page token.\n\n**Saves:** `{{qrId}}`, `{{qrCode}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"label\": \"Showroom rack 3\",\n    \"count\": 1,\n    \"targetToken\": \"{{productPageToken}}\",\n    \"targetType\": \"product\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const qrIdValue = get(body.result, \"qrCodes.0.id\");",
+                  "    if (qrIdValue != null && qrIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"qrId\", String(qrIdValue));",
+                  "        console.log(\"qrId = \" + qrIdValue);",
+                  "    }",
+                  "    const qrCodeValue = get(body.result, \"qrCodes.0.code\");",
+                  "    if (qrCodeValue != null && qrCodeValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"qrCode\", String(qrCodeValue));",
+                  "        console.log(\"qrCode = \" + qrCodeValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "listQrCodes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listQrCodes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listQrCodes"
+              ]
+            },
+            "description": "Your QR codes with their targets.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ qrCodes, total, hasMore }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"page\": 1,\n    \"pageSize\": 60,\n    \"search\": \"\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateQrCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateQrCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateQrCode"
+              ]
+            },
+            "description": "Re-label or re-map a QR (null targetToken = unmap).\n\n\n**Auth:** Signed in\n\n**Required:** `id`\n\n**Returns:** The QR record.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"id\": \"{{qrId}}\",\n    \"label\": \"Showroom rack 3\",\n    \"targetToken\": \"{{collectionPageToken}}\",\n    \"targetType\": \"collection\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "resolveQrCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resolveQrCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resolveQrCode"
+              ]
+            },
+            "description": "Where a scanned QR lands (counts a scan).\n\n\n**Auth:** Public — no token\n\n**Required:** `code`\n\n**Returns:** `{ code, mapped, url, token? }` — `url` is null while unmapped.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"code\": \"{{qrCode}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Product links (render share)",
+      "description": "Public pages for a finished render at `/p/<token>`. Snapshot-based: they keep working after the render or tiles change.",
+      "item": [
+        {
+          "name": "createProductLink",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createProductLink",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createProductLink"
+              ]
+            },
+            "description": "Publish a render (by generationId, or a previewUrl).\n\n\n**Auth:** Signed in\n\n**Required:** `generationId or previewUrl`\n\n**Returns:** `{ token, url, title }`.\n\n**Saves:** `{{productLinkToken}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"generationId\": \"{{generationId}}\",\n    \"title\": \"Natural Oak wardrobe\",\n    \"details\": \"Laminate: Natural Oak\",\n    \"productIds\": [],\n    \"extraImages\": []\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const productLinkTokenValue = get(body.result, \"token\");",
+                  "    if (productLinkTokenValue != null && productLinkTokenValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"productLinkToken\", String(productLinkTokenValue));",
+                  "        console.log(\"productLinkToken = \" + productLinkTokenValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getProductLink",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getProductLink",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getProductLink"
+              ]
+            },
+            "description": "Resolve a render link (counts a view).\n\n\n**Auth:** Public — no token\n\n**Required:** `token`\n\n**Returns:** The link snapshot (title, images, details, products, owner branding).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"token\": \"{{productLinkToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "listProductLinks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listProductLinks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listProductLinks"
+              ]
+            },
+            "description": "Your render links.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ links, total, hasMore }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"page\": 1,\n    \"pageSize\": 40\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "revokeProductLink",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/revokeProductLink",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "revokeProductLink"
+              ]
+            },
+            "description": "Disable or re-enable a render link.\n\n\n**Auth:** Signed in\n\n**Required:** `token`\n\n**Returns:** `{ success, revoked }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"{{productLinkToken}}\",\n    \"revoked\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Carpenter sharing",
+      "description": "Share attempts, clients and follow-ups for the Carpenter Pro flow. Counts are attempts, never confirmed deliveries.",
+      "item": [
+        {
+          "name": "recordShareAttempt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/recordShareAttempt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "recordShareAttempt"
+              ]
+            },
+            "description": "Log a share attempt and create / update the client.\n\n\n**Auth:** Signed in\n\n**Required:** `clientName or clientId`\n\n**Returns:** `{ success, attemptId, attempt, client, countedAs: \"attempt\" }`.\n\n**Notes:** `channel`: `device_share` | `copy`. `status` on create: `attempted` | `cancelled`. Refused for roles without share capability.\n\n**Saves:** `{{attemptId}}`, `{{clientId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"clientName\": \"Priya Shah\",\n    \"whatsapp\": \"+919876543210\",\n    \"notes\": \"Natural Oak · Kitchen\",\n    \"followUpDate\": \"2026-10-05\",\n    \"generationId\": \"{{generationId}}\",\n    \"channel\": \"device_share\",\n    \"status\": \"attempted\",\n    \"outgoingMessage\": \"Here is your render\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const attemptIdValue = get(body.result, \"attemptId\");",
+                  "    if (attemptIdValue != null && attemptIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"attemptId\", String(attemptIdValue));",
+                  "        console.log(\"attemptId = \" + attemptIdValue);",
+                  "    }",
+                  "    const clientIdValue = get(body.result, \"client.id\");",
+                  "    if (clientIdValue != null && clientIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"clientId\", String(clientIdValue));",
+                  "        console.log(\"clientId = \" + clientIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "updateShareAttempt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateShareAttempt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateShareAttempt"
+              ]
+            },
+            "description": "Mark your attempt sent / failed / cancelled (or back to attempted).\n\n\n**Auth:** Signed in\n\n**Required:** `attemptId`, `status`\n\n**Returns:** `{ success, attempt }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"attemptId\": \"{{attemptId}}\",\n    \"status\": \"sent\",\n    \"statusNote\": \"Client replied\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getShareStats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getShareStats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getShareStats"
+              ]
+            },
+            "description": "Sharing stats for Home (manufacturers include sponsored dealers).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ total, last7Days, last30Days, uniqueClients, byStatus, byChannel, followUps: { overdue, dueToday, upcoming, horizonDays } }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "listFollowUps",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listFollowUps",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listFollowUps"
+              ]
+            },
+            "description": "Clients with a follow-up date, bucketed overdue / today / upcoming.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ today, horizon, items: [{ bucket, client, canEdit, attemptCount, lastAttemptAt }] }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"days\": 14,\n    \"limit\": 100\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "listShareClients",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listShareClients",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listShareClients"
+              ]
+            },
+            "description": "Clients visible to the user.\n\n\n**Auth:** Signed in\n\n**Returns:** `{ clients }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"limit\": 100\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateShareClient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateShareClient",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateShareClient"
+              ]
+            },
+            "description": "Edit your client (null followUpDate clears it).\n\n\n**Auth:** Signed in\n\n**Required:** `clientId`\n\n**Returns:** `{ success, client }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"Priya Shah\",\n    \"whatsapp\": \"+919876543210\",\n    \"notes\": \"Prefers matte\",\n    \"followUpDate\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Carpenter scenes",
+      "description": "Real room photos Carpenter Pro renders a laminate onto (`generateCarpenter` with `sceneId`). Bulk-loaded with `npm run scenes:import -- <folder>` (see setup-production.md); curated in Admin Panel → Carpenter Scenes. Hidden scenes are never offered to users or accepted for generation.",
+      "item": [
+        {
+          "name": "listCarpenterScenes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listCarpenterScenes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listCarpenterScenes"
+              ]
+            },
+            "description": "Visible scenes, grouped by category (admins can include hidden ones).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ categories: [{ id, label, count }], ratios, scenes: [{ id, name, category, categoryLabel, aspectRatio, imageUrl, thumbUrl, width, height }] }` — with `includeHidden` (admin only) each scene also has `active`, `hiddenReason`, `sortOrder`.\n\n**Saves:** `{{sceneId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"category\": null,\n    \"includeHidden\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const sceneIdValue = get(body.result, \"scenes.0.id\");",
+                  "    if (sceneIdValue != null && sceneIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"sceneId\", String(sceneIdValue));",
+                  "        console.log(\"sceneId = \" + sceneIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "createCarpenterScene",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createCarpenterScene",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createCarpenterScene"
+              ]
+            },
+            "description": "Upload one scene.\n\n\n**Auth:** admin only\n\n**Required:** `imageBase64`, `category`\n\n**Returns:** `{ scene, warning }` — `warning` is set (\"low resolution\" / \"mostly blank\") when the importer would have hidden it; the scene is visible either way.\n\n**Notes:** Stored as WebP (longest edge 2048) with a thumbnail. `aspectRatio` defaults to the nearest of 1:1, 3:4, 4:3, 9:16, 16:9; `name` defaults to \"<Category> <n>\". A new category slug is created on the fly.\n\n**Saves:** `{{sceneId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"imageBase64\": \"{{sampleImageBase64}}\",\n    \"imageMimeType\": \"image/png\",\n    \"category\": \"kitchen\",\n    \"name\": \"Postman kitchen\",\n    \"aspectRatio\": null\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const sceneIdValue = get(body.result, \"scene.id\");",
+                  "    if (sceneIdValue != null && sceneIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"sceneId\", String(sceneIdValue));",
+                  "        console.log(\"sceneId = \" + sceneIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "updateCarpenterScene",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateCarpenterScene",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateCarpenterScene"
+              ]
+            },
+            "description": "Rename, recategorize, change ratio, reorder, show / hide.\n\n\n**Auth:** admin only\n\n**Required:** `sceneId`\n\n**Returns:** `{ scene }` (admin fields included).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"sceneId\": \"{{sceneId}}\",\n    \"name\": \"Kitchen — island\",\n    \"category\": \"kitchen\",\n    \"aspectRatio\": \"4:3\",\n    \"active\": true,\n    \"sortOrder\": 0\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setCarpenterScenesActive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setCarpenterScenesActive",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setCarpenterScenesActive"
+              ]
+            },
+            "description": "Show or hide many scenes at once.\n\n\n**Auth:** admin only\n\n**Required:** `sceneIds`\n\n**Returns:** `{ success, updated }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"sceneIds\": [\n      \"{{sceneId}}\"\n    ],\n    \"active\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tile scenes (TileMaster Basic)",
+      "description": "Admin-authored scenes with pre-mapped surfaces. Not the product catalog.",
+      "item": [
+        {
+          "name": "saveTileCollection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/saveTileCollection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "saveTileCollection"
+              ]
+            },
+            "description": "Save a scene with its surfaces.\n\n\n**Auth:** admin · bootlegar\n\n**Required:** `name`, `sceneImageBase64`, `surfaces (≥ 1)`\n\n**Returns:** `{ success, collectionId, sceneImageUrl }`.\n\n**Saves:** `{{tileCollectionId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"name\": \"Postman living room\",\n    \"sceneImageBase64\": \"{{sampleImageBase64}}\",\n    \"sceneMimeType\": \"image/png\",\n    \"surfaces\": [\n      {\n        \"id\": \"floor-1\",\n        \"label\": \"Floor\",\n        \"plane\": \"floor\",\n        \"tileSize\": \"600x600\",\n        \"tileImageIds\": [],\n        \"corners\": [\n          {\n            \"x\": 0.1,\n            \"y\": 0.6\n          },\n          {\n            \"x\": 0.9,\n            \"y\": 0.6\n          },\n          {\n            \"x\": 1,\n            \"y\": 1\n          },\n          {\n            \"x\": 0,\n            \"y\": 1\n          }\n        ],\n        \"repeatX\": 8,\n        \"repeatY\": 6,\n        \"rotation\": 0,\n        \"opacity\": 1,\n        \"tileScale\": 1\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const tileCollectionIdValue = get(body.result, \"collectionId\");",
+                  "    if (tileCollectionIdValue != null && tileCollectionIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"tileCollectionId\", String(tileCollectionIdValue));",
+                  "        console.log(\"tileCollectionId = \" + tileCollectionIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "listTileCollections",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listTileCollections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "listTileCollections"
+              ]
+            },
+            "description": "All scenes.\n\n\n**Auth:** Public — no token\n\n**Returns:** `{ success, collections }` (newest 60).",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getCollectionScene",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getCollectionScene",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getCollectionScene"
+              ]
+            },
+            "description": "A scene image as base64 (for canvas compositing).\n\n\n**Auth:** Public — no token\n\n**Required:** `collectionId`\n\n**Returns:** `{ success, base64, mimeType }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"collectionId\": \"{{tileCollectionId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tile sizes",
+      "description": "The size list TileMaster offers (built-ins + admin-added).",
+      "item": [
+        {
+          "name": "getTileSizes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getTileSizes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getTileSizes"
+              ]
+            },
+            "description": "Custom sizes and hidden built-in markers.\n\n\n**Auth:** Public — no token\n\n**Returns:** Array of size records.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "createTileSize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createTileSize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createTileSize"
+              ]
+            },
+            "description": "Add a custom size.\n\n\n**Auth:** admin only\n\n**Required:** `width`, `height`, `unit`\n\n**Returns:** The size record (`id` = its value, e.g. `600x1200`).\n\n**Saves:** `{{tileSizeValue}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"width\": 600,\n    \"height\": 1200,\n    \"unit\": \"mm\",\n    \"cat\": \"Floor\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const tileSizeValueValue = get(body.result, \"id\");",
+                  "    if (tileSizeValueValue != null && tileSizeValueValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"tileSizeValue\", String(tileSizeValueValue));",
+                  "        console.log(\"tileSizeValue = \" + tileSizeValueValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "deleteTileSize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteTileSize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteTileSize"
+              ]
+            },
+            "description": "Remove a custom size, or hide a built-in.\n\n\n**Auth:** admin only\n\n**Required:** `value`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"value\": \"{{tileSizeValue}}\",\n    \"isBuiltIn\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "restoreTileSize",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/restoreTileSize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "restoreTileSize"
+              ]
+            },
+            "description": "Un-hide a built-in size.\n\n\n**Auth:** admin only\n\n**Required:** `value`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"value\": \"600x600\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Master prompts",
+      "description": "Admin-managed prompt templates per tool; one is active per tool.",
+      "item": [
+        {
+          "name": "createMasterPrompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createMasterPrompt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createMasterPrompt"
+              ]
+            },
+            "description": "Add a prompt template.\n\n\n**Auth:** admin only\n\n**Required:** `name`, `tool`, `template`\n\n**Returns:** The prompt record.\n\n**Saves:** `{{promptId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"name\": \"Postman prompt\",\n    \"tool\": \"CARPENTER\",\n    \"template\": \"Photorealistic interior, soft daylight\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const promptIdValue = get(body.result, \"id\");",
+                  "    if (promptIdValue != null && promptIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"promptId\", String(promptIdValue));",
+                  "        console.log(\"promptId = \" + promptIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "getMasterPrompts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getMasterPrompts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getMasterPrompts"
+              ]
+            },
+            "description": "Prompts for a tool, newest first.\n\n\n**Auth:** Public — no token\n\n**Required:** `tool`\n\n**Returns:** Array of prompt records.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"tool\": \"CARPENTER\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "updateMasterPrompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updateMasterPrompt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updateMasterPrompt"
+              ]
+            },
+            "description": "Edit a prompt.\n\n\n**Auth:** admin only\n\n**Required:** `id`, `updates`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"id\": \"{{promptId}}\",\n    \"updates\": {\n      \"name\": \"Postman prompt (edited)\",\n      \"template\": \"Photorealistic interior, warm evening light\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setActiveMasterPrompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setActiveMasterPrompt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setActiveMasterPrompt"
+              ]
+            },
+            "description": "Make a prompt the active one for its tool.\n\n\n**Auth:** admin only\n\n**Required:** `id`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"id\": \"{{promptId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Shop & payments",
+      "description": "Credit packages and Razorpay checkout.",
+      "item": [
+        {
+          "name": "getPackages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getPackages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getPackages"
+              ]
+            },
+            "description": "Credit packages (cached briefly).\n\n\n**Auth:** Public — no token\n\n**Returns:** Array of packages.\n\n**Saves:** `{{packageId}}`",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const packageIdValue = get(body.result, \"0.id\");",
+                  "    if (packageIdValue != null && packageIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"packageId\", String(packageIdValue));",
+                  "        console.log(\"packageId = \" + packageIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "createPackage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createPackage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createPackage"
+              ]
+            },
+            "description": "Add a credit package.\n\n\n**Auth:** admin only\n\n**Required:** `credits`, `price`\n\n**Returns:** The package.\n\n**Saves:** `{{packageId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"credits\": 100,\n    \"price\": 2500,\n    \"tagline\": \"Postman pack\",\n    \"color\": \"#111111\",\n    \"isPopular\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const packageIdValue = get(body.result, \"id\");",
+                  "    if (packageIdValue != null && packageIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"packageId\", String(packageIdValue));",
+                  "        console.log(\"packageId = \" + packageIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "updatePackage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/updatePackage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "updatePackage"
+              ]
+            },
+            "description": "Edit a package.\n\n\n**Auth:** admin only\n\n**Required:** `packageId`, `updates`\n\n**Returns:** `{ success }`.\n\n**Notes:** Allowed keys: `credits`, `price`, `isPopular`, `color`, `tagline`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"packageId\": \"{{packageId}}\",\n    \"updates\": {\n      \"price\": 2400,\n      \"tagline\": \"Postman pack (sale)\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "createPaymentOrder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/createPaymentOrder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "createPaymentOrder"
+              ]
+            },
+            "description": "Create a Razorpay order for a package.\n\n\n**Auth:** Signed in\n\n**Required:** `packageId`\n\n**Returns:** `{ orderId, amount, currency, keyId, credits }`.\n\n**Notes:** Needs RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"packageId\": \"{{packageId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "verifyPaymentSignature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verifyPaymentSignature",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verifyPaymentSignature"
+              ]
+            },
+            "description": "Verify Razorpay's signature and credit the account (idempotent).\n\n\n**Auth:** Signed in\n\n**Required:** `razorpay_order_id`, `razorpay_payment_id`, `razorpay_signature`\n\n**Returns:** `{ success, message }` — a repeated payment id is a no-op.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"packageId\": \"{{packageId}}\",\n    \"credits\": 100,\n    \"razorpay_order_id\": \"order_xxx\",\n    \"razorpay_payment_id\": \"pay_xxx\",\n    \"razorpay_signature\": \"<from Razorpay checkout>\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Org chat",
+      "description": "One chat room per organization (organization + its members). The room id is the organization's username: a member's `organizationId`, or an organization account's own username; admins may open any room. In Postman, `login` fills `{{organizationId}}` accordingly when it is empty.",
+      "item": [
+        {
+          "name": "getChatMessages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getChatMessages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getChatMessages"
+              ]
+            },
+            "description": "Messages after a cursor (tail of the room when omitted).\n\n\n**Auth:** Signed in\n\n**Required:** `organizationId`\n\n**Returns:** `{ messages, typing, cursor }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"afterId\": null,\n    \"limit\": 50\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "sendChatMessage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sendChatMessage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sendChatMessage"
+              ]
+            },
+            "description": "Post a text message.\n\n\n**Auth:** Signed in\n\n**Required:** `organizationId`, `text`\n\n**Returns:** `{ success, message }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"text\": \"Hello from Postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "sendChatFile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sendChatFile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sendChatFile"
+              ]
+            },
+            "description": "Attach a file (base64).\n\n\n**Auth:** Signed in\n\n**Returns:** `{ success, message }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"base64\": \"{{sampleImageBase64}}\",\n    \"fileName\": \"pixel.png\",\n    \"fileType\": \"image/png\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setChatTyping",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setChatTyping",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setChatTyping"
+              ]
+            },
+            "description": "Typing indicator on / off.\n\n\n**Auth:** Signed in\n\n**Required:** `organizationId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"organizationId\": \"{{organizationId}}\",\n    \"typing\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System (admin)",
+      "description": "Image-provider configuration from the Admin Panel. Keys saved here are stored in the database; keys in .env take precedence.",
+      "item": [
+        {
+          "name": "getSystemStatus",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getSystemStatus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getSystemStatus"
+              ]
+            },
+            "description": "Live provider, key presence and masked previews.\n\n\n**Auth:** admin only\n\n**Returns:** Provider + per-key status.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setGeminiKey",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setGeminiKey",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setGeminiKey"
+              ]
+            },
+            "description": "Save the Gemini API key.\n\n\n**Auth:** admin only\n\n**Required:** `apiKey`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"apiKey\": \"<gemini api key>\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setOpenAIKey",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setOpenAIKey",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setOpenAIKey"
+              ]
+            },
+            "description": "Save the OpenAI API key.\n\n\n**Auth:** admin only\n\n**Required:** `apiKey`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"apiKey\": \"<openai api key>\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setImageProvider",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/setImageProvider",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "setImageProvider"
+              ]
+            },
+            "description": "Switch generations between Gemini and OpenAI.\n\n\n**Auth:** admin only\n\n**Required:** `provider`\n\n**Returns:** `{ success, provider }`.\n\n**Notes:** Refused while the target provider has no key.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"provider\": \"gemini\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error log",
+      "description": "Client + server error capture, viewed in the Admin Panel.",
+      "item": [
+        {
+          "name": "logClientError",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/logClientError",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "logClientError"
+              ]
+            },
+            "description": "Report a client-side failure.\n\n\n**Auth:** Public — no token\n\n**Returns:** `{ success }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"tool\": \"CARPENTER\",\n    \"code\": \"unavailable\",\n    \"message\": \"Couldn't reach the server\",\n    \"detail\": \"\",\n    \"url\": \"https://namelessos.cloud/\",\n    \"userAgent\": \"Postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "getErrorLogs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/getErrorLogs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "getErrorLogs"
+              ]
+            },
+            "description": "Recent errors, newest first.\n\n\n**Auth:** admin · bootlegar · organization\n\n**Returns:** `{ success, logs }`.\n\n**Saves:** `{{errorLogId}}`",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"limit\": 100\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Save ids from this response for the requests that follow.",
+                  "const get = (o, p) => p.split(\".\").reduce((a, k) => (a == null ? undefined : a[k]), o);",
+                  "let body = null;",
+                  "try { body = pm.response.json(); } catch (e) { /* not JSON */ }",
+                  "if (pm.response.code < 300 && body && body.result != null) {",
+                  "    const errorLogIdValue = get(body.result, \"logs.0.id\");",
+                  "    if (errorLogIdValue != null && errorLogIdValue !== \"\") {",
+                  "        pm.collectionVariables.set(\"errorLogId\", String(errorLogIdValue));",
+                  "        console.log(\"errorLogId = \" + errorLogIdValue);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "resolveErrorLog",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/resolveErrorLog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "resolveErrorLog"
+              ]
+            },
+            "description": "Mark an entry resolved / unresolved.\n\n\n**Auth:** admin · bootlegar · organization\n\n**Required:** `id`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"id\": \"{{errorLogId}}\",\n    \"resolved\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "clearErrorLogs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clearErrorLogs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clearErrorLogs"
+              ]
+            },
+            "description": "Clear the log (optionally only resolved entries).\n\n\n**Auth:** admin · bootlegar · organization\n\n**Returns:** `{ success, deleted }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"resolvedOnly\": true\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Misc",
+      "description": "",
+      "item": [
+        {
+          "name": "searchPinterest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/searchPinterest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "searchPinterest"
+              ]
+            },
+            "description": "Inspiration search (currently simulated results).\n\n\n**Auth:** Public — no token\n\n**Required:** `query`\n\n**Returns:** `{ results }`.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"query\": \"walnut wardrobe\",\n    \"limit\": 10\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cleanup (run last)",
+      "description": "Destructive requests, moved here from their modules so a top-to-bottom run creates everything first and deletes it at the end. Each deletes the resource the earlier requests saved in a variable.",
+      "item": [
+        {
+          "name": "deleteQrCode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteQrCode",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteQrCode"
+              ]
+            },
+            "description": "Delete a QR (printed copies stop working).\n\n\n**Auth:** Signed in\n\n**Required:** `id`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"id\": \"{{qrId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteProductPage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteProductPage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteProductPage"
+              ]
+            },
+            "description": "Delete a product page; QRs pointing at it become unmapped.\n\n\n**Auth:** Signed in\n\n**Required:** `token`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"token\": \"{{productPageToken}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteProduct",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteProduct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteProduct"
+              ]
+            },
+            "description": "Delete a product and its files (its public page stays online).\n\n\n**Auth:** Signed in\n\n**Required:** `productId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"productId\": \"{{productId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteCollection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteCollection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteCollection"
+              ]
+            },
+            "description": "Delete a collection, its products, faces and files.\n\n\n**Auth:** Signed in\n\n**Required:** `collectionId`\n\n**Returns:** `{ success, productsDeleted }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"collectionId\": \"{{collectionId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteFolder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteFolder",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteFolder"
+              ]
+            },
+            "description": "Delete a folder subtree; files move to Home unless deleteFiles.\n\n\n**Auth:** Signed in\n\n**Required:** `folderId`\n\n**Returns:** `{ success, foldersDeleted }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"folderId\": \"{{folderId}}\",\n    \"deleteFiles\": false\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteGeneration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteGeneration",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteGeneration"
+              ]
+            },
+            "description": "Delete a generation record and its files.\n\n\n**Auth:** admin only\n\n**Required:** `generationId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"generationId\": \"{{generationId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteMasterPrompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteMasterPrompt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteMasterPrompt"
+              ]
+            },
+            "description": "Delete a prompt.\n\n\n**Auth:** admin only\n\n**Required:** `id`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"id\": \"{{promptId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deletePackage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deletePackage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deletePackage"
+              ]
+            },
+            "description": "Delete a package.\n\n\n**Auth:** admin only\n\n**Required:** `packageId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"packageId\": \"{{packageId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteTileCollection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteTileCollection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteTileCollection"
+              ]
+            },
+            "description": "Delete a scene.\n\n\n**Auth:** admin · bootlegar\n\n**Required:** `collectionId`\n\n**Returns:** `{ success }`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"collectionId\": \"{{tileCollectionId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteUser",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteUser",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteUser"
+              ]
+            },
+            "description": "Delete a user (their generation history is kept).\n\n\n**Auth:** admin · bootlegar · organization\n\n**Required:** `targetUsername`\n\n**Returns:** `{ success }`.\n\n**Notes:** The super admin cannot be deleted.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"callerUsername\": \"{{username}}\",\n    \"targetUsername\": \"{{targetUsername}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "deleteCarpenterScene",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/deleteCarpenterScene",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "deleteCarpenterScene"
+              ]
+            },
+            "description": "Delete a scene and its image files.\n\n\n**Auth:** admin only\n\n**Required:** `sceneId`\n\n**Returns:** `{ success }` — past renders keep their own copies.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"username\": \"{{username}}\",\n    \"sceneId\": \"{{sceneId}}\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
