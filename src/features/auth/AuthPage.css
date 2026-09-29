@@ -107,7 +107,7 @@
 }
 
 .visual-copy > span {
-  color: var(--color-highlight);
+  color: var(--auth-highlight);
 }
 
 .visual-copy h1 {
