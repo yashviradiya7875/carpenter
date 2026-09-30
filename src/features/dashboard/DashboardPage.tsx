@@ -1,35 +1,12 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { ApiError, callApi } from '../../shared/api/client'
+import { ApiError, callApi, callApiMultipart } from '../../shared/api/client'
 import type { AuthAccount } from '../../shared/auth/types'
+import { Brand, Mark } from './components/DashboardIcon'
+import { LibraryDialog } from './components/LibraryDialog'
+import { UploadOptionsDialog } from './components/UploadOptionsDialog'
+import { UPLOAD_TYPES, type Collection, type MaterialChoice, type MaterialSlot, type Product, type ProductDetails, type UploadType } from './dashboardTypes'
 import './DashboardPage.css'
 
-type MaterialSlot = 'primary' | 'accent'
-type UploadType = 'single' | 'multi' | 'reel'
-type MaterialChoice = {
-  id: string
-  name: string
-  imageId?: string
-  base64?: string
-  mimeType?: string
-  imageUrl?: string
-  source: 'upload' | 'library'
-}
-
-type Collection = { id: string; name: string; productCount?: number }
-type Product = {
-  id: string
-  name: string
-  thumbUrl?: string
-  coverThumbUrl?: string
-  imageUrl?: string
-}
-type ProductDetails = {
-  product?: {
-    id: string
-    name: string
-    images?: Array<{ id: string; url?: string; thumbUrl?: string }>
-  }
-}
 type ShareStats = {
   total?: number
   uniqueClients?: number
@@ -39,11 +16,6 @@ type GenerationResult = { imageUrl?: string; generationId?: string }
 type DashboardPageProps = { account: AuthAccount; onSignOut: () => void }
 const MAX_RENDER_MATERIAL_BYTES = 20 * 1024 * 1024
 const MAX_MULTI_PRODUCT_FILES = 200
-const UPLOAD_TYPES: Array<{ id: UploadType; title: string; description: string; icon: 'image' | 'layers' | 'video' }> = [
-  { id: 'single', title: 'Single product', description: 'Create content for one product.', icon: 'image' },
-  { id: 'multi', title: 'Multi product', description: 'Work with a group of products.', icon: 'layers' },
-  { id: 'reel', title: 'Reel / video', description: 'Create a short-form video.', icon: 'video' },
-]
 
 function roleLabel(role: string): string {
   if (role === 'organization') return 'Manufacturer'
@@ -103,37 +75,6 @@ function messageFor(error: unknown): string {
   return 'Something went wrong. Please try again.'
 }
 
-function Mark({ name }: { name: 'layers' | 'upload' | 'folder' | 'qr' | 'image' | 'spark' | 'expand' | 'video' | 'close' | 'arrow' | 'back' }) {
-  const shapes = {
-    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>,
-    upload: <><path d="M12 16V4m0 0L8 8m4-4 4 4" /><path d="M5 14v5h14v-5" /></>,
-    folder: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3V7Z" /><path d="M3 10h18" /></>,
-    qr: <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h3v3h-3zm5 0h2m-7 5v2m5-4v4h2" /></>,
-    image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m21 15-5-5L5 20" /></>,
-    spark: <><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-2-5.8L4 11l6-2.2L12 3Z" /><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z" /></>,
-    expand: <><path d="M14 4h6v6m0-6-7 7M10 20H4v-6m0 6 7-7" /></>,
-    video: <><rect x="3" y="5" width="13" height="14" rx="2" /><path d="m16 10 5-3v10l-5-3" /></>,
-    close: <path d="m6 6 12 12M18 6 6 18" />,
-    arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
-    back: <path d="m15 18-6-6 6-6M9 12h12" />,
-  }
-
-  return (
-    <svg className="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {shapes[name]}
-    </svg>
-  )
-}
-
-function Brand() {
-  return (
-    <span className="dashboard-brand">
-      <span className="dashboard-brand-mark"><Mark name="layers" /></span>
-      <span>carpenter<span className="dashboard-brand-light">.pro</span></span>
-    </span>
-  )
-}
-
 function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const [primaryMaterial, setPrimaryMaterial] = useState<MaterialChoice | null>(null)
   const [accentMaterial, setAccentMaterial] = useState<MaterialChoice | null>(null)
@@ -145,8 +86,14 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const [collections, setCollections] = useState<Collection[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [activeCollection, setActiveCollection] = useState<Collection | null>(null)
+  const [selectedLibraryProductId, setSelectedLibraryProductId] = useState<string | null>(null)
+  const [selectedLibraryCollectionId, setSelectedLibraryCollectionId] = useState<string>('')
+  const [librarySearch, setLibrarySearch] = useState('')
   const [libraryError, setLibraryError] = useState('')
+  const [libraryNotice, setLibraryNotice] = useState('')
   const [isLibraryLoading, setIsLibraryLoading] = useState(false)
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null)
+  const [deletingCollectionId, setDeletingCollectionId] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
   const [render, setRender] = useState<GenerationResult | null>(null)
@@ -163,6 +110,8 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const singleImageInput = useRef<HTMLInputElement>(null)
   const multipleImagesInput = useRef<HTMLInputElement>(null)
   const videoInput = useRef<HTMLInputElement>(null)
+  const libraryImageInput = useRef<HTMLInputElement>(null)
+  const libraryFolderInput = useRef<HTMLInputElement>(null)
 
   const capabilities = account.capabilities
   const canUpload = capabilities?.canUploadLaminate === true
@@ -181,6 +130,18 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
       .catch(() => setShareStats(null))
     return () => controller.abort()
   }, [account.username])
+
+  useEffect(() => {
+    const folderInput = libraryFolderInput.current
+    if (folderInput) {
+      const browserFolderInput = folderInput as unknown as {
+        webkitdirectory?: string
+        directory?: string
+      }
+      browserFolderInput.webkitdirectory = ''
+      browserFolderInput.directory = ''
+    }
+  }, [])
 
   useEffect(() => {
     if (!isUploadOptionsOpen) {
@@ -299,11 +260,114 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setRender(null)
   }
 
-  const openLibrary = async (slot: MaterialSlot) => {
+  const addLibraryProducts = async (files: File[], collectionId: string | null) => {
+    if (!collectionId) {
+      setLibraryError('Create or select a collection before you upload laminates.')
+      return
+    }
+
+    const uniqueFiles = files.filter((file) => file.type.startsWith('image/') || file.type.length === 0)
+    if (!uniqueFiles.length) {
+      setLibraryError('Only image files can be added to a laminate collection.')
+      return
+    }
+
+    try {
+      setIsLibraryLoading(true)
+      const formData = new FormData()
+      uniqueFiles.forEach((file) => formData.append('files', file))
+      formData.append('collectionId', collectionId)
+      formData.append('type', 'laminate')
+      formData.append('autoPublish', '1')
+      formData.append('paths', JSON.stringify(uniqueFiles.map((file) => {
+        const fileWithPath = file as File & { webkitRelativePath?: string }
+        return fileWithPath.webkitRelativePath || file.name
+      })))
+      formData.append('username', account.username)
+
+      const result = await callApiMultipart<{ success?: boolean; collection?: Collection; productsCreated?: number; products?: Product[] }>(
+        'uploadProducts',
+        formData,
+      )
+
+      if (result.collection) {
+        setCollections((current) => {
+          const existing = current.some((collection) => collection.id === result.collection!.id)
+          if (existing) {
+            return current.map((collection) => collection.id === result.collection!.id ? { ...collection, ...result.collection! } : collection)
+          }
+          return [result.collection!, ...current]
+        })
+      }
+
+      if (activeCollection && activeCollection.id === collectionId) {
+        const nextCollection = collections.find((collection) => collection.id === collectionId) ?? activeCollection
+        if (nextCollection) {
+          await openCollection(nextCollection, librarySearch)
+        }
+      } else {
+        const nextCollection = collections.find((collection) => collection.id === collectionId)
+        if (nextCollection) {
+          await openCollection(nextCollection, librarySearch)
+        }
+      }
+
+      setLibraryError('')
+    } catch (error) {
+      setLibraryError(messageFor(error))
+    } finally {
+      setIsLibraryLoading(false)
+    }
+  }
+
+  const createCollection = async () => {
+    const collectionName = window.prompt('Name your collection', `Collection ${collections.length + 1}`)
+    if (!collectionName) return
+
+    const trimmed = collectionName.trim()
+    if (!trimmed) return
+
+    try {
+      setIsLibraryLoading(true)
+      const collection = await callApi<Collection, {
+        username: string; name: string; type: string; description: string; isShared: boolean
+      }>('createCollection', {
+        username: account.username,
+        name: trimmed,
+        type: 'laminate',
+        description: 'Created from Carpenter Pro library',
+        isShared: false,
+      })
+
+      setCollections((current) => [collection, ...current])
+      setSelectedLibraryCollectionId(collection.id)
+      setActiveCollection(collection)
+      setProducts([])
+      setSelectedLibraryProductId(null)
+      setLibraryError('')
+    } catch (error) {
+      setLibraryError(messageFor(error))
+    } finally {
+      setIsLibraryLoading(false)
+    }
+  }
+
+  const handleLibraryImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? [])
+    event.currentTarget.value = ''
+    void addLibraryProducts(files, activeCollection?.id ?? selectedLibraryCollectionId)
+  }
+
+  const handleLibraryFolderUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? [])
+    event.currentTarget.value = ''
+    void addLibraryProducts(files, activeCollection?.id ?? selectedLibraryCollectionId)
+  }
+
+  const openLibrary = async (slot: MaterialSlot, searchOverride = '') => {
     setLibrarySlot(slot)
-    setActiveCollection(null)
-    setProducts([])
     setLibraryError('')
+    setLibraryNotice('')
     setIsLibraryOpen(true)
     setIsLibraryLoading(true)
     try {
@@ -314,9 +378,20 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         type: 'laminate',
         page: 1,
         pageSize: 40,
-        search: '',
+        search: searchOverride,
       })
-      setCollections(result.collections ?? [])
+      const nextCollections = result.collections ?? []
+      setCollections(nextCollections)
+      const firstCollection = nextCollections[0]
+      setSelectedLibraryCollectionId(firstCollection?.id ?? '')
+      if (firstCollection) {
+        setActiveCollection(firstCollection)
+        setProducts([])
+        await openCollection(firstCollection, searchOverride)
+      } else {
+        setActiveCollection(null)
+        setProducts([])
+      }
     } catch (error) {
       setLibraryError(messageFor(error))
     } finally {
@@ -324,10 +399,13 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     }
   }
 
-  const openCollection = async (collection: Collection) => {
+  const openCollection = async (collection: Collection, searchOverride = librarySearch) => {
+    setSelectedLibraryCollectionId(collection.id)
     setActiveCollection(collection)
+    setSelectedLibraryProductId(null)
     setProducts([])
     setLibraryError('')
+    setLibraryNotice('')
     setIsLibraryLoading(true)
     try {
       const result = await callApi<{ products: Product[] }, {
@@ -338,13 +416,82 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         type: 'laminate',
         page: 1,
         pageSize: 40,
-        search: '',
+        search: searchOverride,
       })
-      setProducts(result.products ?? [])
+      const resultProducts = result.products ?? []
+      setProducts(resultProducts)
+      if (resultProducts.length) setSelectedLibraryProductId(resultProducts[0].id)
     } catch (error) {
       setLibraryError(messageFor(error))
     } finally {
       setIsLibraryLoading(false)
+    }
+  }
+
+  const deleteLibraryProduct = async (product: Product): Promise<boolean> => {
+    setLibraryError('')
+    setLibraryNotice('')
+    setDeletingProductId(product.id)
+
+    try {
+      const result = await callApi<{ success: boolean }, { username: string; productId: string }>(
+        'deleteProduct',
+        { username: account.username, productId: product.id },
+      )
+      if (!result.success) throw new ApiError('The product could not be deleted.')
+
+      const collectionId = activeCollection?.id
+      const nextCount = Math.max(0, (activeCollection?.productCount ?? products.length) - 1)
+      setProducts((current) => current.filter((item) => item.id !== product.id))
+      setCollections((current) => current.map((collection) => collection.id === collectionId
+        ? { ...collection, productCount: nextCount }
+        : collection))
+      setActiveCollection((current) => current && current.id === collectionId
+        ? { ...current, productCount: nextCount }
+        : current)
+      setSelectedLibraryProductId((current) => current === product.id
+        ? products.find((item) => item.id !== product.id)?.id ?? null
+        : current)
+      setLibraryNotice(`${product.name} was deleted.`)
+      return true
+    } catch (error) {
+      setLibraryError(messageFor(error))
+      return false
+    } finally {
+      setDeletingProductId(null)
+    }
+  }
+
+  const deleteLibraryCollection = async (collection: Collection): Promise<boolean> => {
+    setLibraryError('')
+    setLibraryNotice('')
+    setDeletingCollectionId(collection.id)
+
+    try {
+      const result = await callApi<{ success: boolean }, { username: string; collectionId: string }>(
+        'deleteCollection',
+        { username: account.username, collectionId: collection.id },
+      )
+      if (!result.success) throw new ApiError('The collection could not be deleted.')
+
+      const remainingCollections = collections.filter((item) => item.id !== collection.id)
+      setCollections(remainingCollections)
+      if (activeCollection?.id === collection.id) {
+        const nextCollection = remainingCollections[0] ?? null
+        setActiveCollection(nextCollection)
+        setSelectedLibraryCollectionId(nextCollection?.id ?? '')
+        setProducts([])
+        setSelectedLibraryProductId(null)
+        if (nextCollection) await openCollection(nextCollection, librarySearch)
+      }
+
+      setLibraryNotice(`${collection.name} was deleted.`)
+      return true
+    } catch (error) {
+      setLibraryError(messageFor(error))
+      return false
+    } finally {
+      setDeletingCollectionId(null)
     }
   }
 
@@ -426,6 +573,18 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     + (shareStats?.followUps?.dueToday ?? 0)
     + (shareStats?.followUps?.upcoming ?? 0)
 
+  const displayedCollections = collections.filter((collection) => {
+    const target = librarySearch.trim().toLowerCase()
+    if (!target) return true
+    return collection.name.toLowerCase().includes(target)
+  })
+
+  const displayedProducts = products.filter((product) => {
+    const target = librarySearch.trim().toLowerCase()
+    if (!target) return true
+    return product.name.toLowerCase().includes(target)
+  })
+
   return (
     <main
       className="carpenter-dashboard"
@@ -490,6 +649,23 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
             accept="video/*"
             multiple
             onChange={handleVideoUpload}
+            tabIndex={-1}
+          />
+          <input
+            ref={libraryImageInput}
+            className="file-input-hidden"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleLibraryImageUpload}
+            tabIndex={-1}
+          />
+          <input
+            ref={libraryFolderInput}
+            className="file-input-hidden"
+            type="file"
+            multiple
+            onChange={handleLibraryFolderUpload}
             tabIndex={-1}
           />
           <button
@@ -641,101 +817,46 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
       </div>
 
       {isUploadOptionsOpen ? (
-        <div className="upload-options-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) closeUploadOptions()
-        }}>
-          <section
-            className="upload-options-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="upload-options-title"
-            ref={uploadDialog}
-          >
-            <header className="upload-options-header">
-              <div>
-                <span className="upload-options-kicker">COMMON WORKSPACE</span>
-                <h2 id="upload-options-title">Choose an upload type</h2>
-                <p>Select a workflow to continue.</p>
-              </div>
-              <button
-                className="upload-options-close"
-                type="button"
-                aria-label="Close upload options"
-                onClick={closeUploadOptions}
-              >
-                <Mark name="close" />
-              </button>
-            </header>
-            <div className="upload-option-list">
-              {UPLOAD_TYPES.map((option) => (
-                <button
-                  className={`upload-option ${selectedUploadType === option.id ? 'is-selected' : ''}`}
-                  type="button"
-                  key={option.id}
-                  data-upload-option
-                  aria-pressed={selectedUploadType === option.id}
-                  onClick={() => selectUploadType(option.id)}
-                >
-                  <span className="upload-option-icon"><Mark name={option.icon} /></span>
-                  <span className="upload-option-copy"><strong>{option.title}</strong><small>{option.description}</small></span>
-                  <Mark name="arrow" />
-                </button>
-              ))}
-            </div>
-          </section>
-        </div>
+        <UploadOptionsDialog
+          selectedUploadType={selectedUploadType}
+          dialogRef={uploadDialog}
+          onClose={closeUploadOptions}
+          onSelect={selectUploadType}
+        />
       ) : null}
 
       {isLibraryOpen ? (
-        <div className="library-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setIsLibraryOpen(false)
-        }}>
-          <section className="library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-title">
-            <header className="library-header">
-              <div>
-                {activeCollection ? (
-                  <button className="library-back" type="button" onClick={() => {
-                    setActiveCollection(null)
-                    setProducts([])
-                  }}><Mark name="back" /> Collections</button>
-                ) : <span className="library-kicker">ACCESSIBLE MATERIALS</span>}
-                <h2 id="library-title">{activeCollection?.name || 'Laminate library'}</h2>
-                <p>{activeCollection ? 'Choose a product for this render.' : 'Collections available to your account.'}</p>
-              </div>
-              <button className="library-close" type="button" aria-label="Close library" onClick={() => setIsLibraryOpen(false)}>
-                <Mark name="close" />
-              </button>
-            </header>
-            {libraryError ? <p className="library-error" role="alert">{libraryError}</p> : null}
-            {isLibraryLoading ? (
-              <div className="library-loading" role="status"><span className="loading-indicator" /> Loading materials…</div>
-            ) : activeCollection ? (
-              products.length ? (
-                <div className="library-grid">
-                  {products.map((product) => (
-                    <button className="library-product" type="button" key={product.id} onClick={() => void chooseProduct(product)}>
-                      {product.thumbUrl || product.coverThumbUrl || product.imageUrl ? (
-                        <img src={product.thumbUrl || product.coverThumbUrl || product.imageUrl} alt="" />
-                      ) : <span className="product-placeholder"><Mark name="image" /></span>}
-                      <span>{product.name}</span>
-                      <small>Use as {librarySlot}</small>
-                    </button>
-                  ))}
-                </div>
-              ) : <p className="library-empty">No products in this collection yet.</p>
-            ) : collections.length ? (
-              <div className="collection-list">
-                {collections.map((collection) => (
-                  <button className="collection-row" type="button" key={collection.id} onClick={() => void openCollection(collection)}>
-                    <span className="collection-mark"><Mark name="folder" /></span>
-                    <span><strong>{collection.name}</strong><small>{collection.productCount ?? 0} materials</small></span>
-                    <Mark name="arrow" />
-                  </button>
-                ))}
-              </div>
-            ) : <p className="library-empty">No laminate collections are available for this account.</p>}
-          </section>
-        </div>
+        <LibraryDialog
+          activeCollection={activeCollection}
+          collections={collections}
+          displayedCollections={displayedCollections}
+          displayedProducts={displayedProducts}
+          selectedProductId={selectedLibraryProductId}
+          search={librarySearch}
+          error={libraryError}
+          notice={libraryNotice}
+          isLoading={isLibraryLoading}
+          deletingProductId={deletingProductId}
+          deletingCollectionId={deletingCollectionId}
+          onClose={() => setIsLibraryOpen(false)}
+          onSearchChange={setLibrarySearch}
+          onSelectCollection={(collectionId) => {
+            setSelectedLibraryCollectionId(collectionId)
+            const collection = collections.find((item) => item.id === collectionId)
+            if (collection) void openCollection(collection)
+          }}
+          onCreateCollection={createCollection}
+          onUploadImages={() => libraryImageInput.current?.click()}
+          onUploadFolder={() => libraryFolderInput.current?.click()}
+          onSelectProduct={setSelectedLibraryProductId}
+          onDeleteProduct={deleteLibraryProduct}
+          onDeleteCollection={deleteLibraryCollection}
+          onConfirm={() => {
+            const selectedProduct = displayedProducts.find((product) => product.id === selectedLibraryProductId)
+              ?? products.find((product) => product.id === selectedLibraryProductId)
+            if (selectedProduct) void chooseProduct(selectedProduct)
+          }}
+        />
       ) : null}
     </main>
   )

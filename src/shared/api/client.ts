@@ -35,7 +35,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081').replace(/\/+$/, '')
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081').replace(/\/+$/, '')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -67,6 +67,56 @@ export async function callApi<TResponse, TData extends object = Record<string, u
       method: 'POST',
       headers,
       body: JSON.stringify({ data }),
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new ApiError('Unable to reach the API server.', { cause: error })
+  }
+
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch (error) {
+    throw new ApiError('The API returned an unreadable response.', {
+      httpStatus: response.status,
+      cause: error,
+    })
+  }
+
+  if (!response.ok) {
+    const apiError = readApiError(payload)
+    throw new ApiError(apiError?.message || `The request failed (${response.status}).`, {
+      code: apiError?.status,
+      httpStatus: response.status,
+      details: apiError?.details,
+    })
+  }
+
+  if (!isRecord(payload) || !('result' in payload)) {
+    throw new ApiError('The API response did not include a result.', {
+      httpStatus: response.status,
+    })
+  }
+
+  return (payload as CallableEnvelope<TResponse>).result
+}
+
+export async function callApiMultipart<TResponse>(
+  endpoint: string,
+  formData: FormData,
+  options: CallableRequestOptions = {},
+): Promise<TResponse> {
+  const token = getAuthToken()
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/api/${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
       signal: options.signal,
     })
   } catch (error) {
