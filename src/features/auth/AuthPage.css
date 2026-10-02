@@ -294,10 +294,7 @@
 }
 
 .auth-field input:focus-visible,
-.remember-control input:focus-visible,
-.text-button:focus-visible,
-.password-visibility:focus-visible,
-.submit-button:focus-visible {
+.remember-control input:focus-visible {
   outline: 2px solid rgba(193, 143, 238, 0.7);
   outline-offset: 2px;
 }
@@ -321,22 +318,7 @@
   position: absolute;
   top: 50%;
   right: 7px;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: #a99fb4;
-  padding: 0;
   transform: translateY(-50%);
-  cursor: pointer;
-}
-
-.password-visibility:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--color-text);
 }
 
 .password-visibility svg {
@@ -368,47 +350,8 @@
   accent-color: var(--auth-accent);
 }
 
-.text-button {
-  border: 0;
-  background: transparent;
-  color: var(--auth-highlight);
-  padding: 2px 0;
-  font: 600 10px/1.4 var(--font-ui);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.text-button:hover {
-  color: #fff;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .submit-button {
-  min-height: 41px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: 9px;
-  background: #f5f2f7;
-  color: #19151f;
-  padding: 0 16px;
-  font: 650 11px/1 var(--font-ui);
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-
-.submit-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  border-color: #fff;
-  background: #fff;
-}
-
-.submit-button:disabled {
-  cursor: wait;
-  opacity: 0.72;
+  width: 100%;
 }
 
 .form-message {
@@ -550,8 +493,7 @@
   font-size: 13px;
 }
 
-.loading-indicator,
-.button-spinner {
+.loading-indicator {
   width: 18px;
   height: 18px;
   display: inline-block;
@@ -560,11 +502,6 @@
   border-right-color: transparent;
   border-radius: 50%;
   animation: spin 700ms linear infinite;
-}
-
-.button-spinner {
-  width: 14px;
-  height: 14px;
 }
 
 @keyframes spin {
@@ -701,7 +638,7 @@
     align-items: flex-start;
   }
 
-  .text-button {
+  .form-options .app-button--text {
     text-align: right;
   }
 }

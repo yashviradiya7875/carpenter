@@ -521,6 +521,7 @@
 .utility-button {
   background: #45414c;
   color: #eeeaf2;
+  cursor: pointer;
 }
 
 .utility-button:disabled {

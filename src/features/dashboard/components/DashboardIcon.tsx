@@ -1,4 +1,4 @@
-type IconName = 'layers' | 'upload' | 'folder' | 'qr' | 'image' | 'spark' | 'expand' | 'video' | 'close' | 'arrow' | 'back' | 'trash' | 'more'
+type IconName = 'layers' | 'upload' | 'folder' | 'qr' | 'image' | 'spark' | 'expand' | 'video' | 'close' | 'arrow' | 'back' | 'trash' | 'more' | 'activity' | 'home' | 'search' | 'star' | 'refresh' | 'plus' | 'gridLarge' | 'gridSmall' | 'listView'
 
 export function Mark({ name }: { name: IconName }) {
   const shapes = {
@@ -15,6 +15,15 @@ export function Mark({ name }: { name: IconName }) {
     back: <path d="m15 18-6-6 6-6M9 12h12" />,
     trash: <><path d="M4 7h16M10 11v6m4-6v6M5 7l1 14h12l1-14M9 7V4h6v3" /></>,
     more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
+    activity: <><path d="M3 12h4l3-8 4 16 3-8h4" /></>,
+    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9m-9 11v-6h4v6" /></>,
+    search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 5 5" /></>,
+    star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />,
+    refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.7-2L20 12M4 12l2.7 5a7 7 0 0 0 11.7-2" /></>,
+    plus: <path d="M12 5v14m-7-7h14" />,
+    gridLarge: <><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="3" width="8" height="8" rx="1" /><rect x="3" y="13" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /></>,
+    gridSmall: <><rect x="3" y="3" width="5" height="5" rx="1" /><rect x="10" y="3" width="5" height="5" rx="1" /><rect x="17" y="3" width="5" height="5" rx="1" /><rect x="3" y="10" width="5" height="5" rx="1" /><rect x="10" y="10" width="5" height="5" rx="1" /><rect x="17" y="10" width="5" height="5" rx="1" /><rect x="3" y="17" width="5" height="5" rx="1" /><rect x="10" y="17" width="5" height="5" rx="1" /><rect x="17" y="17" width="5" height="5" rx="1" /></>,
+    listView: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></>,
   }
 
   return (

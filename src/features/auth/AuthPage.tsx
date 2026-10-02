@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError, callApi } from '../../shared/api/client'
 import { clearAuthSession, getAuthToken, getAuthUsername, setAuthSession } from '../../shared/auth/session'
 import type { AuthAccount } from '../../shared/auth/types'
+import { Button } from '../../shared/ui/Button'
 import DashboardPage from '../dashboard/DashboardPage'
 import './AuthPage.css'
 
@@ -278,15 +279,16 @@ function App() {
                     placeholder="Enter your password"
                     required
                   />
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="password-visibility"
-                    type="button"
                     aria-label={passwordVisible ? 'Hide password' : 'Show password'}
                     aria-pressed={passwordVisible}
                     onClick={() => setPasswordVisible((visible) => !visible)}
                   >
                     <PasswordIcon visible={passwordVisible} />
-                  </button>
+                  </Button>
                 </span>
               </label>
               <div className="form-options">
@@ -298,13 +300,13 @@ function App() {
                   />
                   <span>Remember me</span>
                 </label>
-                <button className="text-button" type="button" onClick={() => changeView('forgot-password')}>
+                <Button variant="text" size="sm" className="text-button" onClick={() => changeView('forgot-password')}>
                   Forgot password?
-                </button>
+                </Button>
               </div>
-              <button className="submit-button" type="submit" disabled={isBusy}>
-                {isBusy ? <><span className="button-spinner" /> Signing in...</> : <>Sign in <span aria-hidden="true">&#8594;</span></>}
-              </button>
+              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Signing in...">
+                Sign in <span aria-hidden="true">&#8594;</span>
+              </Button>
             </form>
           ) : null}
 
@@ -349,15 +351,16 @@ function App() {
                       placeholder="Enter your password"
                       required
                     />
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="password-visibility"
-                      type="button"
                       aria-label={passwordVisible ? 'Hide password' : 'Show password'}
                       aria-pressed={passwordVisible}
                       onClick={() => setPasswordVisible((visible) => !visible)}
                     >
                       <PasswordIcon visible={passwordVisible} />
-                    </button>
+                    </Button>
                   </span>
                 </label>
                 <label className="auth-field">
@@ -372,21 +375,22 @@ function App() {
                       placeholder="Confirm your password"
                       required
                     />
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="password-visibility"
-                      type="button"
                       aria-label={confirmPasswordVisible ? 'Hide confirmation password' : 'Show confirmation password'}
                       aria-pressed={confirmPasswordVisible}
                       onClick={() => setConfirmPasswordVisible((visible) => !visible)}
                     >
                       <PasswordIcon visible={confirmPasswordVisible} />
-                    </button>
+                    </Button>
                   </span>
                 </label>
               </div>
-              <button className="submit-button" type="submit" disabled={isBusy}>
-                {isBusy ? <><span className="button-spinner" /> Creating account...</> : <>Sign Up <span aria-hidden="true">&#8594;</span></>}
-              </button>
+              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Creating account...">
+                Sign Up <span aria-hidden="true">&#8594;</span>
+              </Button>
             </form>
           ) : null}
 
@@ -404,17 +408,17 @@ function App() {
                   required
                 />
               </label>
-              <button className="submit-button" type="submit" disabled={isBusy}>
-                {isBusy ? <><span className="button-spinner" /> Sending link...</> : <>Send reset link <span aria-hidden="true">&#8594;</span></>}
-              </button>
+              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Sending link...">
+                Send reset link <span aria-hidden="true">&#8594;</span>
+              </Button>
             </form>
           ) : null}
 
           <div className="auth-switch">
             {isSignIn ? (
-              <p>New to Carpenter Pro? <button className="text-button" type="button" onClick={() => changeView('sign-up')}>Sign up</button></p>
+              <p>New to Carpenter Pro? <Button variant="text" size="sm" className="text-button" onClick={() => changeView('sign-up')}>Sign up</Button></p>
             ) : (
-                <p>Already have an account? <button className="text-button" type="button" onClick={() => changeView('sign-in')}>Log in</button></p>
+                <p>Already have an account? <Button variant="text" size="sm" className="text-button" onClick={() => changeView('sign-in')}>Log in</Button></p>
             )}
           </div>
           <p className="auth-terms">By continuing, you agree to use Carpenter Pro in accordance with your organization's access policies.</p>

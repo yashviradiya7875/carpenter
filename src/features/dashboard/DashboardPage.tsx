@@ -5,6 +5,7 @@ import { Brand, Mark } from './components/DashboardIcon'
 import { LibraryDialog } from './components/LibraryDialog'
 import { UploadOptionsDialog } from './components/UploadOptionsDialog'
 import { UPLOAD_TYPES, type Collection, type MaterialChoice, type MaterialSlot, type Product, type ProductDetails, type UploadType } from './dashboardTypes'
+import { FilesPage } from '../files/FilesPage'
 import './DashboardPage.css'
 
 type ShareStats = {
@@ -79,6 +80,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const [primaryMaterial, setPrimaryMaterial] = useState<MaterialChoice | null>(null)
   const [accentMaterial, setAccentMaterial] = useState<MaterialChoice | null>(null)
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
+  const [isFilesOpen, setIsFilesOpen] = useState(false)
   const [isUploadOptionsOpen, setIsUploadOptionsOpen] = useState(false)
   const [selectedUploadType, setSelectedUploadType] = useState<UploadType | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -585,6 +587,10 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     return product.name.toLowerCase().includes(target)
   })
 
+  if (isFilesOpen) {
+    return <FilesPage account={account} onBack={() => setIsFilesOpen(false)} onSignOut={onSignOut} />
+  }
+
   return (
     <main
       className="carpenter-dashboard"
@@ -710,7 +716,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
           <div className="composer-toolbar">
             <div className="composer-shortcuts">
               {canOpenFiles ? (
-                <button className="utility-button" type="button" disabled title="Files workspace will be added in the next workflow step">
+                <button className="utility-button" type="button" onClick={() => setIsFilesOpen(true)}>
                   <Mark name="folder" /> Files
                 </button>
               ) : null}
