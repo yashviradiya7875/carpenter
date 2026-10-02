@@ -1,0 +1,22 @@
+/* Appears after a short delay so fast responses never flash a spinner. */
+.app-loading-state {
+  animation: app-fade-in var(--duration-base) var(--ease-standard) var(--duration-loading-delay) backwards;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2-5);
+  padding: var(--space-6);
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  text-align: center;
+}
+
+.app-loading-state--compact {
+  min-height: 0;
+  flex-direction: row;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}

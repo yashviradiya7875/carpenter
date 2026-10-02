@@ -1,0 +1,82 @@
+/* Global header: the Dashboard header, shared by every page. */
+.app-header {
+  --app-topbar-height: var(--app-header-height, 44px);
+  flex: 0 0 auto;
+}
+
+.app-header .app-topbar-end {
+  gap: var(--space-3);
+}
+
+.app-header-home {
+  display: inline-flex;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Credit balance */
+.credit-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+
+.credit-balance .mark-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--color-accent-light);
+}
+
+.credit-balance-value {
+  color: var(--color-text);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Avatar */
+.profile-trigger {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: var(--border-width) solid var(--avatar-line);
+  border-radius: 50%;
+  background: var(--avatar-bg);
+  color: var(--avatar-text);
+  font-size: var(--font-size-xs);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+/* Phones: keep the number, move the label to assistive technology only. */
+@media (max-width: 450px) {
+  .app-header .app-topbar-end {
+    gap: var(--space-2);
+  }
+
+  .credit-balance {
+    gap: 4px;
+  }
+
+  .credit-balance-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (pointer: coarse) {
+  .profile-trigger {
+    width: 40px;
+    height: 40px;
+  }
+}

@@ -1,0 +1,19 @@
+.app-spinner {
+  display: inline-flex;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.app-spinner-ring {
+  width: var(--app-spinner-size, 18px);
+  height: var(--app-spinner-size, 18px);
+  display: inline-block;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: app-spin var(--duration-spin) linear infinite;
+}
+
+.app-spinner--sm { --app-spinner-size: 14px; }
+.app-spinner--md { --app-spinner-size: 18px; }
+.app-spinner--lg { --app-spinner-size: 28px; }

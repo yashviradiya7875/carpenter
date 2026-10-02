@@ -1,0 +1,6 @@
+/* Zero specificity: any feature or component rule sizing the icon wins. */
+:where(.app-icon) {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}

@@ -1,0 +1,40 @@
+/* Decorative grid background. Colors and opacity come from theme tokens (--effect-grid-*). */
+.app-grid-pattern {
+  --grid-max-opacity: var(--effect-grid-opacity);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: var(--effect-grid-square);
+  stroke: var(--effect-grid-line);
+  pointer-events: none;
+  -webkit-mask-image: var(--grid-mask, none);
+  mask-image: var(--grid-mask, none);
+}
+
+/* Soft falloff toward the edges; consumers can reshape it with --grid-mask. */
+.app-grid-pattern--fade {
+  --grid-mask: radial-gradient(ellipse 70% 60% at 50% 45%, #000 0%, transparent 72%);
+}
+
+.app-grid-square {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0;
+  /* Fade in, then back out (two alternating runs); the component then moves the cell. */
+  animation: app-grid-square var(--grid-duration, 4s) ease-in-out var(--grid-delay, 0s) 2 alternate both;
+}
+
+@keyframes app-grid-square {
+  from { opacity: 0; }
+  to { opacity: var(--grid-max-opacity); }
+}
+
+/* Reduced motion: cells hold still, quieter. Beats the global near-zero duration rule. */
+@media (prefers-reduced-motion: reduce) {
+  .app-grid-square {
+    animation: none !important;
+    opacity: calc(var(--grid-max-opacity) * 0.6);
+  }
+}

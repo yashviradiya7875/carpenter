@@ -1,0 +1,109 @@
+.app-menu {
+  position: fixed;
+  z-index: var(--z-popover);
+  top: 0;
+  left: 0;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: min(360px, calc(100dvh - 16px));
+  overflow: auto;
+  border: var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-overlay);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1);
+  outline: none;
+  animation: app-pop-in var(--duration-fast) var(--ease-out) backwards;
+}
+
+/* -------------------------------------------------------------------- items */
+
+.app-menu-item {
+  width: 100%;
+  min-height: var(--control-height-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text);
+  padding: 0 var(--space-2-5);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-snug);
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition-colors);
+}
+
+/* Hover moves focus to the item, so one highlight covers mouse and keyboard. */
+.app-menu-item:focus {
+  background: var(--color-surface-hover);
+}
+
+.app-menu-item--danger {
+  color: var(--color-danger-text);
+}
+
+.app-menu-item--danger:focus {
+  background: var(--color-danger-bg-strong);
+}
+
+.app-menu-item[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.app-menu-item .app-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.app-menu-item-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------- label & separator */
+
+.app-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding: var(--space-2) var(--space-2-5);
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.app-menu-label strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-menu-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-line);
+}
+
+@media (pointer: coarse) {
+  .app-menu-item {
+    min-height: var(--control-height-touch);
+  }
+}
+
+/* High Contrast mode drops backgrounds; outline the focused item instead. */
+@media (forced-colors: active) {
+  .app-menu-item:focus {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

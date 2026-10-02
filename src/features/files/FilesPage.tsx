@@ -1,16 +1,30 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
-import { toast, ToastContainer } from 'react-toastify'
+import { Slide, toast, ToastContainer } from 'react-toastify'
 import type { AuthAccount } from '../../shared/auth/types'
-import { Brand, Mark } from '../dashboard/components/DashboardIcon'
 import {
+  Button,
+  ConfirmDialog,
+  Dialog,
+  EmptyState,
+  Field,
+  LoadingState,
+  Select,
+  TextInput,
+  useTheme,
+} from '../../shared/ui'
+import { Mark } from '../../shared/components/Mark'
+import { FileRow } from './components/FileRow'
+import { DriveFolderTree } from './components/FolderTree'
+import { UploadImagesRow } from './components/UploadImagesRow'
+import { canEdit, canManage } from './filesPermissions'
+import {
+  asShareDraft,
   createDriveFolder,
   createDriveShareLink,
   deleteDriveFolder,
   getDriveActivity,
   getDriveResourceShares,
-  getSharedDriveResource,
   getString,
-  isRecord,
   listDriveContents,
   loadDriveFolderTree,
   moveDriveFile,
@@ -18,20 +32,22 @@ import {
   renameDriveResource,
   revokeDriveShareLink,
   shareDriveResource,
+  shareLinkToken,
   toggleDriveFavorite,
   uploadDriveImage,
   type DriveFile,
   type DriveFolder,
   type DriveResourceType,
   type DriveRole,
+  type ShareDraft,
 } from './filesService'
+import { errorMessage, formatDate, isDescendant, isImageFile } from './filesUtils'
 import 'react-toastify/dist/ReactToastify.css'
 import './FilesPage.css'
 
 type FilesPageProps = {
   account: AuthAccount
   onBack: () => void
-  onSignOut: () => void
 }
 
 type ShareTarget = {
@@ -48,93 +64,10 @@ type MoveTarget = {
   currentParentId: string | null
 }
 
-type ShareDraft = {
-  visibility: 'private' | 'organization' | 'public'
-  permissions: Record<string, DriveRole>
-}
-
 type FilesViewMode = 'large' | 'small' | 'list'
 
-const DRIVE_ROLES: DriveRole[] = ['owner', 'admin', 'editor', 'viewer']
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
-}
-
-function canEdit(role?: string): boolean {
-  return role === 'owner' || role === 'admin' || role === 'editor'
-}
-
-function canManage(role?: string): boolean {
-  return role === 'owner' || role === 'admin'
-}
-
-function asShareDraft(value: unknown): ShareDraft {
-  const record = isRecord(value) ? value : {}
-  const rawPermissions = isRecord(record.permissions) ? record.permissions : {}
-  const permissions: Record<string, DriveRole> = {}
-
-  Object.entries(rawPermissions).forEach(([username, role]) => {
-    if (typeof role === 'string' && DRIVE_ROLES.includes(role as DriveRole)) permissions[username] = role as DriveRole
-  })
-
-  if (Array.isArray(record.sharedWith)) {
-    record.sharedWith.forEach((username) => {
-      if (typeof username === 'string' && !permissions[username]) permissions[username] = 'viewer'
-    })
-  }
-
-  if (Array.isArray(record.shares)) {
-    record.shares.forEach((share) => {
-      const username = getString(share, 'username', 'userName')
-      const role = getString(share, 'role', 'permission')
-      if (username && role && DRIVE_ROLES.includes(role as DriveRole)) permissions[username] = role as DriveRole
-    })
-  }
-
-  const visibility = record.visibility === 'organization' || record.visibility === 'public'
-    ? record.visibility
-    : 'private'
-
-  return { visibility, permissions }
-}
-
-function shareLinkToken(value: unknown): string | null {
-  if (!isRecord(value)) return null
-  const directToken = getString(value, 'token', 'shareToken')
-  if (directToken) return directToken
-  if (Array.isArray(value.links)) {
-    for (const link of value.links) {
-      const token = getString(link, 'token', 'shareToken')
-      if (token) return token
-    }
-  }
-  const nested = isRecord(value.shareLink) ? value.shareLink : isRecord(value.link) ? value.link : null
-  return nested ? getString(nested, 'token', 'shareToken') ?? null : null
-}
-
-function formatDate(value?: string): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
-}
-
-function isImageFile(file: File): boolean {
-  return file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|tiff?|webp)$/i.test(file.name)
-}
-
-function isDescendant(folderId: string, candidate: DriveFolder, folders: DriveFolder[]): boolean {
-  const foldersById = new Map(folders.map((folder) => [folder.id, folder]))
-  let parentId = candidate.parentId
-  while (parentId) {
-    if (parentId === folderId) return true
-    parentId = foldersById.get(parentId)?.parentId ?? null
-  }
-  return false
-}
-
-export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
+export function FilesPage({ account, onBack }: FilesPageProps) {
+  const { theme } = useTheme()
   const [folderPath, setFolderPath] = useState<DriveFolder[]>([])
   const [folders, setFolders] = useState<DriveFolder[]>([])
   const [folderTree, setFolderTree] = useState<DriveFolder[]>([])
@@ -220,6 +153,10 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
       })
     return () => controller.abort()
   }, [account.username, hasFilesAccess, reloadKey])
+
+  useEffect(() => {
+    document.title = `${currentFolder ? `${currentFolder.name} · ` : ''}Files · Carpenter Pro`
+  }, [currentFolder])
 
   const refresh = () => setReloadKey((value) => value + 1)
 
@@ -422,8 +359,7 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
     setMoveTarget(null)
   }
 
-  const confirmDeleteFolder = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const confirmDeleteFolder = async () => {
     if (!deleteTarget) return
     await runMutation(deleteTarget.id, async () => {
       const result = await deleteDriveFolder(account.username, deleteTarget.id, deleteFiles)
@@ -547,22 +483,22 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
 
   if (!hasFilesAccess) {
     return (
-      <main className="files-page">
-        <FilesTopbar onBack={onBack} onSignOut={onSignOut} />
-        <section className="files-access-message">
-          <Mark name="folder" />
-          <h1>Files access unavailable</h1>
-          <p>This account does not have permission to open Files.</p>
-          <button className="files-button primary" type="button" onClick={onBack}>Back to studio</button>
-        </section>
+      <main className="files-page app-enter-fade">
+        <EmptyState
+          className="files-access-message"
+          icon="folder"
+          headingLevel={1}
+          title="Files access unavailable"
+          description="This account doesn’t have permission to open Files. Contact your organization administrator for access."
+          actions={<Button variant="primary" shape="pill" icon="back" onClick={onBack}>Back to studio</Button>}
+        />
       </main>
     )
   }
 
   return (
-    <main className="files-page">
-      <FilesTopbar onBack={onBack} onSignOut={onSignOut} />
-      <ToastContainer position="bottom-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover theme="dark" limit={4} />
+    <main className="files-page app-enter-fade">
+      <ToastContainer position="bottom-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover theme={theme} limit={4} transition={Slide} />
       <div
         className={`files-content ${isDragActive ? 'is-drag-active' : ''}`}
         onDragEnter={handleDragEnter}
@@ -574,13 +510,15 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
         {isDragActive ? <div className="files-drop-overlay" aria-hidden="true"><Mark name="upload" /><strong>Drop images to upload</strong><span>Images will be added to {currentFolder?.name ?? 'Home'}</span></div> : null}
         <header className="files-heading">
           <div>
-            <span className="files-kicker">CARPENTER PRO</span>
             <h1>Files</h1>
             <p>Your saved renders and folders.</p>
           </div>
-          <button className="files-button subtle" type="button" onClick={() => void toggleActivity()} aria-expanded={isActivityOpen}>
-            <Mark name="activity" /> Activity
-          </button>
+          <div className="files-heading-actions">
+            <Button variant="ghost" shape="pill" icon="back" onClick={onBack}>Studio</Button>
+            <Button shape="pill" icon="activity" onClick={() => void toggleActivity()} aria-expanded={isActivityOpen}>
+              Activity
+            </Button>
+          </div>
         </header>
 
         <nav className="files-breadcrumbs" aria-label="Folder path">
@@ -591,17 +529,22 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
             <span className="files-breadcrumb-item" key={folder.id}>
               <Mark name="arrow" />
               <button type="button" onClick={() => setFolderPath((current) => current.slice(0, index + 1))} aria-current={index === folderPath.length - 1 ? 'page' : undefined}>
-                {folder.name}
+                <span>{folder.name}</span>
               </button>
             </span>
           ))}
         </nav>
 
         <div className="files-toolbar">
-          <label className="files-search">
-            <Mark name="search" />
-            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search files and folders" aria-label="Search files and folders" />
-          </label>
+          <TextInput
+            className="files-search"
+            type="search"
+            startIcon="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search files and folders"
+            aria-label="Search files and folders"
+          />
           <div className="files-view-switch" role="group" aria-label="Folder contents view">
             <button className={viewMode === 'large' ? 'is-active' : ''} type="button" aria-label="Large icon view" aria-pressed={viewMode === 'large'} title="Large icons" onClick={() => setViewMode('large')}>
               <Mark name="gridLarge" /><span>Large</span>
@@ -614,20 +557,26 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
             </button>
           </div>
           <div className="files-toolbar-actions">
-            <button className={`files-button subtle ${favoritesOnly ? 'is-active' : ''}`} type="button" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly((value) => !value)}>
-              <Mark name="star" /> Favorites
-            </button>
-            <button className="files-button subtle files-refresh" type="button" onClick={refresh} aria-label="Refresh files">
-              <Mark name="refresh" />
-            </button>
+            <Button shape="pill" icon="star" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly((value) => !value)}>
+              Favorites
+            </Button>
+            <Button shape="pill" iconOnly icon="refresh" onClick={refresh} aria-label="Refresh files" tooltip="Refresh" />
             {account.capabilities?.canSaveToFiles ? (
-              <button className="files-button subtle" type="button" onClick={() => uploadInput.current?.click()} disabled={!canUploadHere || isUploading} title={!canUploadHere ? 'You need editor access to upload into this folder.' : undefined}>
-                <Mark name="upload" /> {isUploading ? `Uploading ${uploadProgress.completed}/${uploadProgress.total}` : 'Upload images'}
-              </button>
+              <Button
+                shape="pill"
+                icon="upload"
+                onClick={() => uploadInput.current?.click()}
+                disabled={!canUploadHere}
+                loading={isUploading}
+                loadingLabel={`Uploading ${uploadProgress.completed}/${uploadProgress.total}`}
+                title={!canUploadHere ? 'You need editor access to upload into this folder.' : undefined}
+              >
+                Upload images
+              </Button>
             ) : null}
-            <button className="files-button primary" type="button" onClick={() => { setFolderName(''); setIsCreateFolderOpen(true) }} disabled={!canCreateHere} title={!canCreateHere ? 'You need editor access to create a folder here.' : undefined}>
-              <Mark name="plus" /> New folder
-            </button>
+            <Button variant="primary" shape="pill" icon="plus" onClick={() => { setFolderName(''); setIsCreateFolderOpen(true) }} disabled={!canCreateHere} title={!canCreateHere ? 'You need editor access to create a folder here.' : undefined}>
+              New folder
+            </Button>
           </div>
         </div>
 
@@ -647,9 +596,9 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
               <span>Name</span><span>Updated</span><span>Access</span><span className="sr-only">Actions</span>
             </div>
             {isLoading ? (
-              <div className="files-state" role="status"><span className="loading-indicator" /> Loading files…</div>
+              <LoadingState label="Loading files…" />
             ) : folders.length || files.length ? (
-              <div className="files-list">
+              <div className="files-list app-enter">
                 {folders.map((folder) => (
                   <FileRow
                     key={`folder-${folder.id}`}
@@ -690,24 +639,28 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
                 {canUploadHere && !search && !favoritesOnly ? <UploadImagesRow onClick={() => uploadInput.current?.click()} isUploading={isUploading} /> : null}
               </div>
             ) : (
-              <div className="files-state empty-state">
-                <Mark name={search || favoritesOnly ? 'search' : 'folder'} />
-                <h2>{search ? 'No matching items' : favoritesOnly ? 'No favorites yet' : 'This folder is empty'}</h2>
-                <p>{search ? 'Try another search.' : favoritesOnly ? 'Favorite a file or folder to find it here.' : canUploadHere ? 'Upload images or generate a render to see it here.' : 'Create a folder or generate a render to see it here.'}</p>
-                {!search && !favoritesOnly && canCreateHere ? (
-                  <div className="files-empty-actions">
-                    {canUploadHere ? <button className="files-button subtle" type="button" onClick={() => uploadInput.current?.click()} disabled={isUploading}><Mark name="upload" /> Upload images</button> : null}
-                    <button className="files-button primary" type="button" onClick={() => setIsCreateFolderOpen(true)}><Mark name="plus" /> New folder</button>
-                  </div>
-                ) : null}
-              </div>
+              <EmptyState
+                icon={search || favoritesOnly ? 'search' : 'folder'}
+                title={search ? 'No matching items' : favoritesOnly ? 'No favorites yet' : 'This folder is empty'}
+                description={search ? 'Try another search.' : favoritesOnly ? 'Favorite a file or folder to find it here.' : canUploadHere ? 'Upload images or generate a render to see it here.' : 'Create a folder or generate a render to see it here.'}
+                actions={search ? (
+                  <Button shape="pill" onClick={() => setSearch('')}>Clear search</Button>
+                ) : favoritesOnly ? (
+                  <Button shape="pill" onClick={() => setFavoritesOnly(false)}>Show all items</Button>
+                ) : canCreateHere ? (
+                  <>
+                    {canUploadHere ? <Button shape="pill" icon="upload" onClick={() => uploadInput.current?.click()} loading={isUploading}>Upload images</Button> : null}
+                    <Button variant="primary" shape="pill" icon="plus" onClick={() => setIsCreateFolderOpen(true)}>New folder</Button>
+                  </>
+                ) : undefined}
+              />
             )}
           </section>
 
           {isActivityOpen ? (
-            <aside className="files-activity-panel" aria-label="Recent activity">
-              <header><h2>Activity</h2><button className="files-icon-button" type="button" onClick={() => setIsActivityOpen(false)} aria-label="Close activity"><Mark name="close" /></button></header>
-              {isLoadingActivity ? <div className="files-state compact" role="status"><span className="loading-indicator" /> Loading activity…</div> : activity.length ? (
+            <aside className="files-activity-panel app-enter-end" aria-label="Recent activity">
+              <header><h2>Activity</h2><Button variant="ghost" size="sm" iconOnly icon="close" onClick={() => setIsActivityOpen(false)} aria-label="Close activity" /></header>
+              {isLoadingActivity ? <LoadingState compact label="Loading activity…" /> : activity.length ? (
                 <ul>
                   {activity.map((item, index) => (
                     <li key={getString(item, 'id', 'activityId') ?? `activity-${index}`}>
@@ -717,76 +670,103 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
                     </li>
                   ))}
                 </ul>
-              ) : <p className="files-activity-empty">No activity to show.</p>}
+              ) : <EmptyState compact icon="activity" headingLevel={3} title="No activity yet" description="Changes to files and folders appear here." />}
             </aside>
           ) : null}
         </div>
       </div>
 
-      {isCreateFolderOpen ? (
-        <div className="files-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsCreateFolderOpen(false) }}>
-          <form className="files-modal" role="dialog" aria-modal="true" aria-labelledby="create-folder-title" onSubmit={(event) => void createFolder(event)}>
-            <span className="files-modal-icon"><Mark name="folder" /></span>
-            <h2 id="create-folder-title">New folder</h2>
-            <p>Create a folder in {currentFolder?.name ?? 'Home'}.</p>
-            <label className="files-field"><span>Folder name</span><input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} maxLength={120} required /></label>
-            <div className="files-modal-actions">
-              <button className="files-button subtle" type="button" disabled={isCreatingFolder} onClick={() => setIsCreateFolderOpen(false)}>Cancel</button>
-              <button className="files-button primary" type="submit" disabled={isCreatingFolder || !folderName.trim()}>{isCreatingFolder ? 'Creating…' : 'Create folder'}</button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <Dialog
+        open={isCreateFolderOpen}
+        onClose={() => setIsCreateFolderOpen(false)}
+        title="New folder"
+        description={`Create a folder in ${currentFolder?.name ?? 'Home'}.`}
+        size="sm"
+        icon="folder"
+        dismissible={!isCreatingFolder}
+        onSubmit={(event) => void createFolder(event)}
+        footer={(
+          <>
+            <Button shape="pill" disabled={isCreatingFolder} onClick={() => setIsCreateFolderOpen(false)}>Cancel</Button>
+            <Button variant="primary" shape="pill" type="submit" disabled={!folderName.trim()} loading={isCreatingFolder} loadingLabel="Creating…">Create folder</Button>
+          </>
+        )}
+      >
+        <Field label="Folder name">
+          <TextInput autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} maxLength={120} required />
+        </Field>
+      </Dialog>
 
       {moveTarget ? (
-        <div className="files-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isLoadingMoveFolders) setMoveTarget(null) }}>
-          <form className="files-modal" role="dialog" aria-modal="true" aria-labelledby="move-resource-title" onSubmit={(event) => void moveResource(event)}>
-            <span className="files-modal-icon"><Mark name="folder" /></span>
-            <h2 id="move-resource-title">Move {moveTarget.resourceType}</h2>
-            <p>Choose a destination for <strong>{moveTarget.name}</strong>.</p>
-            {isLoadingMoveFolders ? <div className="files-state compact" role="status"><span className="loading-indicator" /> Loading folders…</div> : (
-              <label className="files-field"><span>Destination</span>
-                <select autoFocus value={moveDestination} onChange={(event) => setMoveDestination(event.target.value)}>
-                  <option value="">Home</option>
-                  {destinationFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-                </select>
-              </label>
-            )}
-            <div className="files-modal-actions">
-              <button className="files-button subtle" type="button" disabled={busyId === moveTarget.id} onClick={() => setMoveTarget(null)}>Cancel</button>
-              <button className="files-button primary" type="submit" disabled={isLoadingMoveFolders || busyId === moveTarget.id}>{busyId === moveTarget.id ? 'Moving…' : 'Move'}</button>
-            </div>
-          </form>
-        </div>
+        <Dialog
+          open
+          onClose={() => setMoveTarget(null)}
+          title={`Move ${moveTarget.resourceType}`}
+          description={<>Choose a destination for <strong>{moveTarget.name}</strong>.</>}
+          size="sm"
+          icon="folder"
+          dismissible={!isLoadingMoveFolders && busyId !== moveTarget.id}
+          onSubmit={(event) => void moveResource(event)}
+          footer={(
+            <>
+              <Button shape="pill" disabled={busyId === moveTarget.id} onClick={() => setMoveTarget(null)}>Cancel</Button>
+              <Button variant="primary" shape="pill" type="submit" disabled={isLoadingMoveFolders} loading={busyId === moveTarget.id} loadingLabel="Moving…">Move</Button>
+            </>
+          )}
+        >
+          {isLoadingMoveFolders ? <LoadingState compact label="Loading folders…" /> : (
+            <Field label="Destination">
+              <Select autoFocus value={moveDestination} onChange={(event) => setMoveDestination(event.target.value)}>
+                <option value="">Home</option>
+                {destinationFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+              </Select>
+            </Field>
+          )}
+        </Dialog>
       ) : null}
 
       {deleteTarget ? (
-        <div className="files-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && busyId !== deleteTarget.id) setDeleteTarget(null) }}>
-          <form className="files-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-folder-title" onSubmit={(event) => void confirmDeleteFolder(event)}>
-            <span className="files-modal-icon danger"><Mark name="trash" /></span>
-            <h2 id="delete-folder-title">Delete {deleteTarget.name}?</h2>
-            <p>Folders inside it are deleted. Files move to Home unless you choose to delete them too.</p>
-            <label className="files-checkbox"><input type="checkbox" checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)} /><span>Delete files inside this folder</span></label>
-            <div className="files-modal-actions">
-              <button className="files-button subtle" type="button" disabled={busyId === deleteTarget.id} onClick={() => setDeleteTarget(null)}>Cancel</button>
-              <button className="files-button danger" type="submit" disabled={busyId === deleteTarget.id}>{busyId === deleteTarget.id ? 'Deleting…' : 'Delete folder'}</button>
-            </div>
-          </form>
-        </div>
+        <ConfirmDialog
+          open
+          tone="danger"
+          title={`Delete ${deleteTarget.name}?`}
+          description="Folders inside it are deleted. Files move to Home unless you choose to delete them too."
+          confirmLabel="Delete folder"
+          loading={busyId === deleteTarget.id}
+          loadingLabel="Deleting…"
+          onConfirm={() => void confirmDeleteFolder()}
+          onCancel={() => setDeleteTarget(null)}
+        >
+          <label className="files-checkbox">
+            <input type="checkbox" checked={deleteFiles} onChange={(event) => setDeleteFiles(event.target.checked)} />
+            <span>Delete files inside this folder</span>
+          </label>
+        </ConfirmDialog>
       ) : null}
 
       {shareTarget ? (
-        <div className="files-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingShares) setShareTarget(null) }}>
-          <form className="files-modal files-share-modal" role="dialog" aria-modal="true" aria-labelledby="share-resource-title" onSubmit={(event) => void saveShares(event)}>
-            <header className="files-modal-heading"><div><span className="files-kicker">SHARE RESOURCE</span><h2 id="share-resource-title">{shareTarget.name}</h2></div><button className="files-icon-button" type="button" onClick={() => setShareTarget(null)} aria-label="Close sharing"><Mark name="close" /></button></header>
-            {isLoadingShares ? <div className="files-state compact" role="status"><span className="loading-indicator" /> Loading sharing…</div> : (
+        <Dialog
+          open
+          onClose={() => setShareTarget(null)}
+          title={`Share “${shareTarget.name}”`}
+          dismissible={!isSavingShares}
+          onSubmit={(event) => void saveShares(event)}
+          className="files-share-dialog"
+          footer={(
+            <>
+              <Button shape="pill" disabled={isSavingShares} onClick={() => setShareTarget(null)}>Close</Button>
+              {canManage(shareTarget.myRole) ? <Button variant="primary" shape="pill" type="submit" disabled={isLoadingShares} loading={isSavingShares} loadingLabel="Saving…">Save sharing</Button> : null}
+            </>
+          )}
+        >
+            {isLoadingShares ? <LoadingState compact label="Loading sharing…" /> : (
               <>
                 {canManage(shareTarget.myRole) ? (
-                  <label className="files-field"><span>Visibility</span>
-                    <select value={shareDraft.visibility} onChange={(event) => setShareDraft((current) => ({ ...current, visibility: event.target.value as ShareDraft['visibility'] }))}>
+                  <Field label="Visibility">
+                    <Select value={shareDraft.visibility} onChange={(event) => setShareDraft((current) => ({ ...current, visibility: event.target.value as ShareDraft['visibility'] }))}>
                       <option value="private">Private</option><option value="organization">Organization</option><option value="public">Public</option>
-                    </select>
-                  </label>
+                    </Select>
+                  </Field>
                 ) : <p className="files-readonly-note">Only an owner or admin can change sharing settings.</p>}
 
                 <div className="files-permissions">
@@ -794,14 +774,14 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
                   {Object.entries(shareDraft.permissions).length ? Object.entries(shareDraft.permissions).map(([username, role]) => (
                     <div className="files-permission-row" key={username}><span>{username}</span>{canManage(shareTarget.myRole) ? (
                       <div className="files-permission-controls">
-                      <select aria-label={`Access for ${username}`} value={role} onChange={(event) => setShareDraft((current) => ({ ...current, permissions: { ...current.permissions, [username]: event.target.value as DriveRole } }))}>
-                        {(['admin', 'editor', 'viewer'] as DriveRole[]).map((option) => <option value={option} key={option}>{option}</option>)}
-                      </select>
-                        <button className="files-remove-permission" type="button" onClick={() => setShareDraft((current) => {
+                        <Select size="sm" aria-label={`Access for ${username}`} value={role} onChange={(event) => setShareDraft((current) => ({ ...current, permissions: { ...current.permissions, [username]: event.target.value as DriveRole } }))}>
+                          {(['admin', 'editor', 'viewer'] as DriveRole[]).map((option) => <option value={option} key={option}>{option}</option>)}
+                        </Select>
+                        <Button variant="destructive" size="xs" shape="pill" onClick={() => setShareDraft((current) => {
                           const permissions = { ...current.permissions }
                           delete permissions[username]
                           return { ...current, permissions }
-                        })}>Remove</button>
+                        })}>Remove</Button>
                       </div>
                     ) : <small>{role}</small>}</div>
                   )) : <p className="files-muted">No individual access granted.</p>}
@@ -809,222 +789,32 @@ export function FilesPage({ account, onBack, onSignOut }: FilesPageProps) {
 
                 {canManage(shareTarget.myRole) ? (
                   <div className="files-add-permission">
-                    <label className="files-field"><span>Add username</span><input value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} /></label>
-                    <label className="files-field"><span>Role</span><select value={shareRole} onChange={(event) => setShareRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></select></label>
-                    <button className="files-button subtle" type="button" onClick={addSharePermission} disabled={!shareUsername.trim()}>Add</button>
+                    <Field label="Add username"><TextInput value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} /></Field>
+                    <Field label="Role">
+                      <Select value={shareRole} onChange={(event) => setShareRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
+                    </Field>
+                    <Button shape="pill" onClick={addSharePermission} disabled={!shareUsername.trim()}>Add</Button>
                   </div>
                 ) : null}
 
                 <div className="files-link-section">
                   <h3>Share link</h3>
                   <div className="files-link-controls">
-                    <select aria-label="Share link access" value={shareLinkRole} onChange={(event) => setShareLinkRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></select>
-                    <button className="files-button subtle" type="button" onClick={() => void createShareLink()} disabled={isCreatingLink}>{isCreatingLink ? 'Creating…' : shareLinkTokenValue ? 'Rotate link' : 'Create link'}</button>
+                    <Select aria-label="Share link access" value={shareLinkRole} onChange={(event) => setShareLinkRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
+                    <Button shape="pill" onClick={() => void createShareLink()} loading={isCreatingLink} loadingLabel="Creating…">{shareLinkTokenValue ? 'Rotate link' : 'Create link'}</Button>
                   </div>
-                  {shareLinkTokenValue ? <div className="files-link-output"><span>Link ready</span><button className="files-button subtle" type="button" onClick={() => void copyShareLink()}>Copy</button><button className="files-button danger" type="button" onClick={() => void revokeShareLink()} disabled={isRevokingLink}>{isRevokingLink ? 'Revoking…' : 'Revoke'}</button></div> : null}
+                  {shareLinkTokenValue ? (
+                    <div className="files-link-output">
+                      <span>Link ready</span>
+                      <Button size="sm" shape="pill" onClick={() => void copyShareLink()}>Copy</Button>
+                      <Button variant="destructive" size="sm" shape="pill" onClick={() => void revokeShareLink()} loading={isRevokingLink} loadingLabel="Revoking…">Revoke</Button>
+                    </div>
+                  ) : null}
                 </div>
               </>
             )}
-            <div className="files-modal-actions">
-              <button className="files-button subtle" type="button" disabled={isSavingShares} onClick={() => setShareTarget(null)}>Close</button>
-              {canManage(shareTarget.myRole) ? <button className="files-button primary" type="submit" disabled={isLoadingShares || isSavingShares}>{isSavingShares ? 'Saving…' : 'Save sharing'}</button> : null}
-            </div>
-          </form>
-        </div>
+        </Dialog>
       ) : null}
-    </main>
-  )
-}
-
-function FilesTopbar({ onBack, onSignOut }: { onBack: () => void; onSignOut: () => void }) {
-  return (
-    <header className="files-topbar">
-      <Brand />
-      <div><button className="files-button subtle" type="button" onClick={onBack}><Mark name="back" /> Studio</button><button className="files-button subtle" type="button" onClick={onSignOut}>Sign out</button></div>
-    </header>
-  )
-}
-
-type FileRowProps = {
-  name: string
-  kind: DriveResourceType
-  updatedAt?: string
-  role?: string
-  isFavorite: boolean
-  imageUrl?: string
-  detail?: string
-  isBusy: boolean
-  onOpen: () => void
-  onFavorite: () => void
-  onRename: () => void
-  onMove: () => void
-  onShare: () => void
-  onDelete?: () => void
-  canManage: boolean
-}
-
-function FileRow({ name, kind, updatedAt, role, isFavorite, imageUrl, detail, isBusy, onOpen, onFavorite, onRename, onMove, onShare, onDelete, canManage: canShare }: FileRowProps) {
-  const mayEdit = canEdit(role)
-  return (
-    <article className="files-row">
-      <button className="files-item-name" type="button" onClick={onOpen} disabled={kind === 'file' && !imageUrl}>
-        {imageUrl ? <img className="files-thumbnail" src={imageUrl} alt="" /> : <span className={`files-item-icon ${kind}`}><Mark name={kind === 'folder' ? 'folder' : 'image'} /></span>}
-        <span><strong>{name}</strong>{detail ? <small>{detail}</small> : null}</span>
-      </button>
-      <span className="files-updated">{formatDate(updatedAt) || '—'}</span>
-      <span className="files-role">{role ?? 'Access'}</span>
-      <div className="files-row-actions">
-        <button className={`files-icon-button favorite-button ${isFavorite ? 'is-favorite' : ''}`} type="button" onClick={onFavorite} aria-label={isFavorite ? `Remove ${name} from favorites` : `Add ${name} to favorites`} disabled={isBusy}>
-          <Mark name="star" />
-        </button>
-        <details className="files-action-menu">
-          <summary aria-label={`Actions for ${name}`}><Mark name="more" /></summary>
-          <div role="menu">
-            {mayEdit ? <>
-              <button type="button" role="menuitem" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onRename() }}>Rename</button>
-              <button type="button" role="menuitem" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onMove() }}>Move</button>
-            </> : null}
-            {canShare ? <button type="button" role="menuitem" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onShare() }}>Sharing</button> : null}
-            {kind === 'folder' && canShare && onDelete ? <button className="danger-text" type="button" role="menuitem" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onDelete() }}>Delete folder</button> : null}
-          </div>
-        </details>
-      </div>
-    </article>
-  )
-}
-
-type DriveFolderTreeProps = {
-  folders: DriveFolder[]
-  currentFolderId: string | null
-  activePath: string[]
-  expandedFolderIds: Set<string>
-  isLoading: boolean
-  onNavigate: (folderId: string) => void
-  onNavigateHome: () => void
-  onToggle: (folderId: string) => void
-}
-
-function DriveFolderTree({ folders, currentFolderId, activePath, expandedFolderIds, isLoading, onNavigate, onNavigateHome, onToggle }: DriveFolderTreeProps) {
-  const rootFolders = folders.filter((folder) => folder.parentId === null)
-  return (
-    <aside className="files-folder-tree-panel" aria-label="Folder navigation">
-      <div className="files-tree-heading"><Mark name="folder" /><span>Folders</span></div>
-      <button className={`files-tree-home ${currentFolderId === null ? 'is-current' : ''}`} type="button" onClick={onNavigateHome} aria-current={currentFolderId === null ? 'page' : undefined}>
-        <Mark name="home" /> Home
-      </button>
-      {isLoading ? <div className="files-tree-state" role="status">Loading folders…</div> : rootFolders.length ? (
-        <div className="files-tree" role="tree" aria-label="Folders">
-          {rootFolders.map((folder) => (
-            <DriveFolderTreeBranch
-              key={folder.id}
-              folder={folder}
-              folders={folders}
-              currentFolderId={currentFolderId}
-              activePath={activePath}
-              expandedFolderIds={expandedFolderIds}
-              depth={0}
-              onNavigate={onNavigate}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      ) : <p className="files-tree-state">No folders yet</p>}
-    </aside>
-  )
-}
-
-type DriveFolderTreeBranchProps = Omit<DriveFolderTreeProps, 'isLoading' | 'onNavigateHome'> & {
-  folder: DriveFolder
-  depth: number
-}
-
-function DriveFolderTreeBranch({ folder, folders, currentFolderId, activePath, expandedFolderIds, depth, onNavigate, onToggle }: DriveFolderTreeBranchProps) {
-  const children = folders.filter((candidate) => candidate.parentId === folder.id)
-  const isExpanded = expandedFolderIds.has(folder.id)
-  const isCurrent = currentFolderId === folder.id
-
-  return (
-    <div className="files-tree-branch" role="treeitem" aria-expanded={children.length ? isExpanded : undefined} aria-current={isCurrent ? 'page' : undefined}>
-      <div className={`files-tree-row ${isCurrent ? 'is-current' : ''} ${activePath.includes(folder.id) ? 'is-in-path' : ''}`} style={{ paddingLeft: `${6 + depth * 15}px` }}>
-        {children.length ? (
-          <button className={`files-tree-toggle ${isExpanded ? 'is-expanded' : ''}`} type="button" aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${folder.name}`} onClick={() => onToggle(folder.id)}>
-            <Mark name="arrow" />
-          </button>
-        ) : <span className="files-tree-toggle-placeholder" />}
-        <button className="files-tree-folder" type="button" onClick={() => onNavigate(folder.id)} title={folder.name}>
-          <Mark name="folder" /><span>{folder.name}</span>
-        </button>
-      </div>
-      {isExpanded && children.length ? (
-        <div role="group">
-          {children.map((child) => (
-            <DriveFolderTreeBranch
-              key={child.id}
-              folder={child}
-              folders={folders}
-              currentFolderId={currentFolderId}
-              activePath={activePath}
-              expandedFolderIds={expandedFolderIds}
-              depth={depth + 1}
-              onNavigate={onNavigate}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function UploadImagesRow({ onClick, isUploading }: { onClick: () => void; isUploading: boolean }) {
-  return (
-    <div className="files-upload-row">
-      <button type="button" onClick={onClick} disabled={isUploading}>
-        <span className="files-upload-row-icon"><Mark name="upload" /></span>
-        <span><strong>{isUploading ? 'Uploading images…' : 'Upload images'}</strong><small>Choose images or drag them into this folder</small></span>
-      </button>
-    </div>
-  )
-}
-
-export function SharedResourcePage({ token }: { token: string }) {
-  const [resource, setResource] = useState<unknown>(null)
-  const [resourceType, setResourceType] = useState<DriveResourceType | null>(null)
-  const [role, setRole] = useState('viewer')
-  const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    getSharedDriveResource(token, { signal: controller.signal })
-      .then((result) => {
-        setResource(result.resource)
-        setResourceType(result.resourceType === 'folder' ? 'folder' : 'file')
-        setRole(result.role ?? 'viewer')
-      })
-      .catch((requestError: unknown) => {
-        if (!controller.signal.aborted) setError(errorMessage(requestError))
-      })
-      .finally(() => { if (!controller.signal.aborted) setIsLoading(false) })
-    return () => controller.abort()
-  }, [token])
-
-  const name = getString(resource, 'name', 'title', 'fileName') ?? 'Shared resource'
-  const imageUrl = getString(resource, 'imageUrl', 'url', 'thumbnailUrl', 'thumbUrl')
-
-  return (
-    <main className="files-page shared-files-page">
-      <header className="files-topbar"><Brand /><a className="files-button subtle" href="/">Carpenter Pro</a></header>
-      <section className="shared-resource">
-        {isLoading ? <div className="files-state" role="status"><span className="loading-indicator" /> Loading shared item…</div> : error ? <p className="files-message error" role="alert">{error}</p> : (
-          <>
-            <span className="files-modal-icon"><Mark name={resourceType === 'folder' ? 'folder' : 'image'} /></span>
-            <span className="files-kicker">SHARED {resourceType?.toUpperCase()} · {role.toUpperCase()}</span>
-            <h1>{name}</h1>
-            {imageUrl ? <img src={imageUrl} alt={name} /> : <p>This shared folder is available through your organization’s Files workspace.</p>}
-          </>
-        )}
-      </section>
     </main>
   )
 }

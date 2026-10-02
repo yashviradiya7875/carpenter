@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Mark } from './DashboardIcon'
+import { Alert, Button, ConfirmDialog, Dialog, EmptyState, LoadingState, Menu, MenuItem, TextInput } from '../../../shared/ui'
+import { Mark } from '../../../shared/components/Mark'
 import type { Collection, Product } from '../dashboardTypes'
 
 type LibraryDialogProps = {
@@ -30,8 +31,7 @@ type DeletionTarget =
   | { type: 'product'; item: Product }
   | { type: 'collection'; item: Collection }
 
-const EMPTY_PRODUCT_MESSAGE = 'Upload images — a filenam e like elegant_black_x.png and elegant_black_y.png becomes one laminate with two faces. Upload a folder and the folder name becomes the laminate.'
-const EMPTY_COLLECTION_MESSAGE = 'Upload images — a filename like elegant_black_x.png and elegant_black_y.png becomes one laminate with two faces. Upload a folder and the folder name becomes the laminate.'
+const UPLOAD_NAMING_HINT = 'Upload images — elegant_black_x.png and elegant_black_y.png become one laminate with two faces. Upload a folder and its name becomes the laminate.'
 
 export function LibraryDialog({
   activeCollection,
@@ -57,18 +57,15 @@ export function LibraryDialog({
   onConfirm,
 }: LibraryDialogProps) {
   const [deletionTarget, setDeletionTarget] = useState<DeletionTarget | null>(null)
-  const [openCollectionMenuId, setOpenCollectionMenuId] = useState<string | null>(null)
   const [deleteAttempted, setDeleteAttempted] = useState(false)
 
   const requestDelete = (product: Product) => {
     setDeletionTarget({ type: 'product', item: product })
-    setOpenCollectionMenuId(null)
     setDeleteAttempted(false)
   }
 
   const requestDeleteCollection = (collection: Collection) => {
     setDeletionTarget({ type: 'collection', item: collection })
-    setOpenCollectionMenuId(null)
     setDeleteAttempted(false)
   }
 
@@ -86,48 +83,54 @@ export function LibraryDialog({
     : deletionTarget?.type === 'collection' && deletingCollectionId === deletionTarget.item.id
 
   return (
-    <div className="library-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose()
-    }}>
-      <section className="library-dialog" role="dialog" aria-modal="true" aria-labelledby="library-title">
-        <header className="library-header">
-          <div>
-            <h2 id="library-title">{activeCollection?.name ?? 'Laminate collections'}</h2>
-            <p>{activeCollection ? `${activeCollection.productCount ?? 0} laminates` : `${collections.length} collections`}</p>
-          </div>
-          <button className="library-close" type="button" aria-label="Close library" onClick={onClose}>
-            <Mark name="close" />
-          </button>
-        </header>
-
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        title={activeCollection?.name ?? 'Laminate collections'}
+        description={activeCollection ? `${activeCollection.productCount ?? 0} laminates` : `${collections.length} collections`}
+        size="lg"
+        className="library-dialog"
+        footer={(
+          <>
+            <span className="library-footer-status" role="status">{selectedProductId ? '1 laminate selected' : 'Select one laminate'}</span>
+            <Button shape="pill" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" shape="pill" disabled={!selectedProductId} onClick={onConfirm}>
+              Use
+            </Button>
+          </>
+        )}
+      >
         <div className="library-toolbar">
-          <input
+          <TextInput
             className="library-search"
+            size="lg"
             type="search"
+            startIcon="search"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search laminates..."
+            placeholder="Search laminates…"
             aria-label="Search laminates"
           />
 
           <div className="library-toolbar-group">
-            <button className="library-create-button" type="button" onClick={onCreateCollection}>+ Collection</button>
+            <Button shape="pill" icon="plus" onClick={onCreateCollection}>Collection</Button>
           </div>
 
           <div className="library-upload-actions">
-            <button className="library-upload-button primary" type="button" onClick={onUploadImages}>
+            <Button variant="primary" shape="pill" icon="upload" className="library-upload-button" onClick={onUploadImages}>
               Upload images
-            </button>
-            <button className="library-upload-button secondary" type="button" onClick={onUploadFolder}>
+            </Button>
+            <Button shape="pill" icon="folder" className="library-upload-button" onClick={onUploadFolder}>
               Upload folder
-            </button>
+            </Button>
           </div>
         </div>
 
-        {error ? <p className="library-error" role="alert">{error}</p> : null}
-        {notice ? <p className="library-notice" role="status">{notice}</p> : null}
+        {error && !deletionTarget ? <Alert tone="error" className="library-message">{error}</Alert> : null}
+        {notice ? <Alert tone="success" className="library-message">{notice}</Alert> : null}
         {isLoading ? (
-          <div className="library-loading" role="status"><span className="loading-indicator" /> Loading materials…</div>
+          <LoadingState label="Loading materials…" className="library-loading" />
         ) : (
           <div className="library-body">
             {collections.length ? (
@@ -141,32 +144,29 @@ export function LibraryDialog({
                           className="collection-row"
                           type="button"
                           aria-current={activeCollection?.id === collection.id ? 'page' : undefined}
-                          onClick={() => {
-                            setOpenCollectionMenuId(null)
-                            onSelectCollection(collection.id)
-                          }}
+                          onClick={() => onSelectCollection(collection.id)}
                         >
                           <span className="collection-mark"><Mark name="folder" /></span>
                           <span><strong>{collection.name}</strong><small>{collection.productCount ?? 0} materials</small></span>
                         </button>
                         <div className="library-collection-actions">
-                          <button
-                            className="library-collection-menu-trigger"
-                            type="button"
-                            aria-label={`More actions for ${collection.name}`}
-                            aria-haspopup="menu"
-                            aria-expanded={openCollectionMenuId === collection.id}
-                            onClick={() => setOpenCollectionMenuId((current) => current === collection.id ? null : collection.id)}
+                          <Menu
+                            trigger={(props) => (
+                              <Button
+                                {...props}
+                                variant="ghost"
+                                size="sm"
+                                iconOnly
+                                icon="more"
+                                className="library-collection-menu-trigger"
+                                aria-label={`More actions for ${collection.name}`}
+                              />
+                            )}
                           >
-                            <Mark name="more" />
-                          </button>
-                          {openCollectionMenuId === collection.id ? (
-                            <div className="library-collection-menu" role="menu">
-                              <button type="button" role="menuitem" onClick={() => requestDeleteCollection(collection)}>
-                                <Mark name="trash" /> Delete collection
-                              </button>
-                            </div>
-                          ) : null}
+                            <MenuItem tone="danger" icon="trash" onSelect={() => requestDeleteCollection(collection)}>
+                              Delete collection
+                            </MenuItem>
+                          </Menu>
                         </div>
                       </div>
                     ))}
@@ -181,93 +181,80 @@ export function LibraryDialog({
                         <span><strong>{activeCollection.name}</strong><small>{activeCollection.productCount ?? 0} materials</small></span>
                       </div>
                       {displayedProducts.length ? (
-                        <div className="library-grid">
+                        <div className="library-grid app-enter">
                           {displayedProducts.map((product) => (
                             <article className="library-product-card" key={product.id}>
                               <button
                                 className={`library-product ${selectedProductId === product.id ? 'is-selected' : ''}`}
                                 type="button"
+                                aria-pressed={selectedProductId === product.id}
                                 onClick={() => onSelectProduct(product.id)}
                                 disabled={Boolean(deletingProductId || deletingCollectionId)}
                               >
                                 {product.thumbUrl || product.coverThumbUrl || product.imageUrl ? (
-                                  <img src={product.thumbUrl || product.coverThumbUrl || product.imageUrl} alt={product.name} />
+                                  <img src={product.thumbUrl || product.coverThumbUrl || product.imageUrl} alt="" />
                                 ) : <span className="product-placeholder"><Mark name="image" /></span>}
                                 <span className="library-product-name">{product.name}</span>
                               </button>
-                              <button
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                iconOnly
+                                icon="trash"
                                 className="library-product-delete"
-                                type="button"
                                 aria-label={`Delete ${product.name}`}
                                 title={`Delete ${product.name}`}
                                 disabled={Boolean(deletingProductId || deletingCollectionId)}
                                 onClick={() => requestDelete(product)}
-                              >
-                                <Mark name="trash" />
-                              </button>
+                              />
                             </article>
                           ))}
                         </div>
+                      ) : search.trim() ? (
+                        <EmptyState compact icon="search" headingLevel={3} title="No matching laminates" description="Try another search." />
                       ) : (
-                        <div className="library-empty-state">
-                          <h3>No laminates yet</h3>
-                          <p>{EMPTY_PRODUCT_MESSAGE}</p>
-                        </div>
+                        <EmptyState
+                          compact
+                          icon="image"
+                          headingLevel={3}
+                          title="No laminates yet"
+                          description={UPLOAD_NAMING_HINT}
+                          actions={<Button variant="primary" shape="pill" icon="upload" onClick={onUploadImages}>Upload images</Button>}
+                        />
                       )}
                     </>
                   ) : (
-                    <div className="library-empty-state">
-                      <h3>No collection selected</h3>
-                      <p>Choose a folder to browse its laminates.</p>
-                    </div>
+                    <EmptyState compact icon="folder" headingLevel={3} title="No collection selected" description="Choose a collection to browse its laminates." />
                   )}
                 </section>
               </div>
             ) : (
-              <div className="library-empty-state">
-                <h3>No laminates yet</h3>
-                <p>{EMPTY_COLLECTION_MESSAGE}</p>
-              </div>
+              <EmptyState
+                icon="layers"
+                headingLevel={3}
+                title="No collections yet"
+                description={`Create a collection to start your library. ${UPLOAD_NAMING_HINT}`}
+                actions={<Button variant="primary" shape="pill" icon="plus" onClick={onCreateCollection}>New collection</Button>}
+              />
             )}
           </div>
         )}
+      </Dialog>
 
-        <footer className="library-footer">
-          <span className="library-footer-status">{selectedProductId ? '1 laminate selected' : 'Select one laminate'}</span>
-          <div className="library-footer-actions">
-            <button className="library-footer-button neutral" type="button" onClick={onClose}>Cancel</button>
-            <button
-              className="library-footer-button primary"
-              type="button"
-              disabled={!selectedProductId}
-              onClick={onConfirm}
-            >
-              Use
-            </button>
-          </div>
-        </footer>
-      </section>
-
-      {deletionTarget ? (
-        <div className="library-delete-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !isDeleting) setDeletionTarget(null)
-        }}>
-          <section className="library-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-item-title" aria-describedby="delete-item-description">
-            <span className="library-delete-icon"><Mark name="trash" /></span>
-            <h2 id="delete-item-title">Delete {deletionTarget.item.name}?</h2>
-            <p id="delete-item-description">{deletionTarget.type === 'product'
-              ? 'This removes the product and all of its uploaded image files from the collection. Its public page stays online.'
-              : 'This permanently removes the collection and all products, faces, and uploaded files inside it.'}</p>
-            {deleteAttempted && error ? <p className="library-error" role="alert">{error}</p> : null}
-            <div className="library-delete-actions">
-              <button className="library-footer-button neutral" type="button" disabled={isDeleting} onClick={() => setDeletionTarget(null)}>Cancel</button>
-              <button className="library-delete-confirm" type="button" disabled={isDeleting} onClick={() => void confirmDelete()}>
-                {isDeleting ? 'Deleting…' : `Delete ${deletionTarget.type}`}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-    </div>
+      <ConfirmDialog
+        open={deletionTarget !== null}
+        tone="danger"
+        title={deletionTarget ? `Delete ${deletionTarget.item.name}?` : ''}
+        description={deletionTarget?.type === 'product'
+          ? 'This removes the product and all of its uploaded image files from the collection. Its public page stays online.'
+          : 'This permanently removes the collection and all products, faces, and uploaded files inside it.'}
+        confirmLabel={deletionTarget ? `Delete ${deletionTarget.type}` : 'Delete'}
+        loading={Boolean(isDeleting)}
+        loadingLabel="Deleting…"
+        error={deleteAttempted && error ? error : undefined}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeletionTarget(null)}
+      />
+    </>
   )
 }

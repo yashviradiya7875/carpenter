@@ -6,20 +6,41 @@ Carpenter Pro is the Carpenter-focused React and TypeScript client for the Surus
 
 ```text
 src/
-  App.tsx                   Root component composition
   main.tsx                  React/Vite bootstrap
-  index.css                 Global styles and resets
-  assets/                   Shared static assets
-  features/
-    auth/                   Sign-in, signup, recovery, and auth styling
-      assets/               Auth-specific imagery
-    prototype/              Preserved dashboard mock; not part of the app entry
+  index.css                 Global entry: design-system styles + app shell
+  app/                      Composition root: app shell (global header + page), session gate, view state
   shared/
-    api/                    Typed API client and callable error handling
-    auth/                   Browser session and token persistence
+    ui/                     Portable design system: tokens, primitives, components, layout (see shared/ui/README.md)
+    components/             Carpenter-specific shared UI: AppHeader (the global header), Brand, Mark
+    api/                    Typed callable client and ApiError
+    auth/                   Session storage, account types and account rules (role labels, app access)
+  features/
+    auth/                   Sign-in / sign-up / recovery UI; authService (API), useSession (session lifecycle)
+    dashboard/              Studio workspace and laminate library; dashboardService (API), materials
+    files/                  Files (Drive) UI and public share page; filesService (API + normalizers), filesPermissions
+    prototype/              Preserved dashboard mock; not part of the app entry
 ```
 
-Keep feature-specific UI, state, and styles together under `features/<name>`. Put reusable infrastructure under `shared`; keep `App.tsx` focused on composing top-level features.
+### Layers and dependency rules
+
+| Layer | May import | Must not |
+|---|---|---|
+| `shared/ui` | React only | Anything outside `shared/ui` — it is copied as-is into other projects |
+| `shared/components` | `shared/ui` | Features, API calls |
+| `shared/api`, `shared/auth` | Each other | UI |
+| `features/<name>` | `shared/*` | Another feature — cross-feature composition happens in `app/` (e.g. Dashboard receives a `renderFiles` slot) |
+| `app/` | Everything | Business logic of its own |
+
+### App shell, header and theme
+
+`app/App.tsx` renders every page inside the same shell: `AppHeader` (logo, credits, theme toggle, account menu) above the page content. Pages never render their own header, and never contain theme logic. They style themselves with semantic tokens, so light and dark work automatically. App-level state the header shows (credits, current view) lives in the shell. Pages report changes through callbacks such as `onCreditsChange`.
+
+Inside a feature:
+
+- `<Name>Page.tsx` owns screen state and layout; `components/` holds its presentational pieces.
+- `<name>Service.ts` is the only place that calls the API; it also normalizes responses.
+- Domain rules live in plain modules (`materials.ts`, `filesPermissions.ts`), not in components.
+- Styles stay in the feature stylesheet; shared looks come from `shared/ui` tokens and components.
 
 ## Product Workflow
 

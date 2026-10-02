@@ -1,0 +1,57 @@
+.app-empty-state {
+  animation: app-content-in var(--duration-base) var(--ease-out) backwards;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.app-empty-state--compact {
+  min-height: 0;
+  padding: var(--space-4);
+}
+
+.app-empty-state-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-1);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-light);
+}
+
+.app-empty-state-icon .app-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.app-empty-state-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.app-empty-state-description {
+  max-width: 42ch;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.app-empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

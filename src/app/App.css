@@ -1,0 +1,18 @@
+/* App shell: the global header above the page. Pages size themselves with --app-header-height. */
+.app-shell {
+  --app-header-height: 44px;
+  min-height: 100svh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-studio);
+}
+
+/* Shown while a stored session is validated. */
+.checking-screen {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  background: var(--background-studio);
+  color: var(--color-muted);
+}

@@ -1,24 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ApiError, callApi } from '../../shared/api/client'
-import { clearAuthSession, getAuthToken, getAuthUsername, setAuthSession } from '../../shared/auth/session'
 import type { AuthAccount } from '../../shared/auth/types'
-import { Button } from '../../shared/ui/Button'
-import DashboardPage from '../dashboard/DashboardPage'
+import { Alert, Button } from '../../shared/ui'
+import { getAuthErrorMessage, requestPasswordReset, signIn, signUp } from './authService'
 import './AuthPage.css'
 
 type AuthView = 'sign-in' | 'sign-up' | 'forgot-password'
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.httpStatus && error.httpStatus >= 500) {
-      return 'We could not complete that request. Please try again shortly.'
-    }
-    if (error.code === 'resource-exhausted') {
-      return 'Too many attempts. Please wait a few minutes and try again.'
-    }
-    return error.message
-  }
-  return 'Something went wrong. Please try again.'
+type AuthPageProps = {
+  /** Called with the signed-in account once its session is stored. */
+  onSignedIn: (account: AuthAccount) => void
+  /** An error from restoring a previous session, shown on arrival. */
+  initialError?: unknown
 }
 
 function Brand() {
@@ -45,7 +37,7 @@ function PasswordIcon({ visible }: { visible: boolean }) {
   )
 }
 
-function App() {
+function AuthPage({ onSignedIn, initialError }: AuthPageProps) {
   const [view, setView] = useState<AuthView>('sign-in')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -55,47 +47,13 @@ function App() {
   const [passwordVisible, setPasswordVisible] = useState(false)
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
-  const [account, setAccount] = useState<AuthAccount | null>(null)
   const [isBusy, setIsBusy] = useState(false)
-  const [isCheckingSession, setIsCheckingSession] = useState(
-    () => Boolean(getAuthToken() && getAuthUsername()),
-  )
-  const [errorMessage, setErrorMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState(() => (initialError ? getAuthErrorMessage(initialError) : ''))
   const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
-    const token = getAuthToken()
-    const savedUsername = getAuthUsername()
-    if (!token || !savedUsername) {
-      if (token || savedUsername) clearAuthSession()
-      return
-    }
-
-    const controller = new AbortController()
-    callApi<AuthAccount, { username: string }>(
-      'getCurrentUser',
-      { username: savedUsername },
-      { signal: controller.signal },
-    )
-      .then((currentAccount) => {
-        if (!currentAccount.allowedApps?.includes('CARPENTER')) {
-          clearAuthSession()
-          setErrorMessage('This account is not enabled for Carpenter Pro. Contact your organization administrator.')
-          return
-        }
-        setAccount(currentAccount)
-      })
-      .catch((requestError: unknown) => {
-        if (controller.signal.aborted) return
-        if (requestError instanceof ApiError && requestError.httpStatus === 401) clearAuthSession()
-        setErrorMessage(getErrorMessage(requestError))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsCheckingSession(false)
-      })
-
-    return () => controller.abort()
-  }, [])
+    document.title = `${view === 'sign-up' ? 'Create account' : view === 'forgot-password' ? 'Reset password' : 'Sign in'} · Carpenter Pro`
+  }, [view])
 
   const changeView = (nextView: AuthView) => {
     setView(nextView)
@@ -114,21 +72,9 @@ function App() {
     setIsBusy(true)
 
     try {
-      const signedInAccount = await callApi<AuthAccount, { username: string; password: string }>(
-        'login',
-        { username: identifier.trim(), password },
-      )
-      if (!signedInAccount.allowedApps?.includes('CARPENTER')) {
-        clearAuthSession()
-        setErrorMessage('This account is not enabled for Carpenter Pro. Contact your organization administrator.')
-        return
-      }
-      if (!signedInAccount.token) throw new Error('The sign-in response did not include a session token.')
-      setAuthSession(signedInAccount.token, signedInAccount.username, rememberMe)
-      setAccount(signedInAccount)
+      onSignedIn(await signIn(identifier, password, rememberMe))
     } catch (requestError) {
-      setErrorMessage(getErrorMessage(requestError))
-    } finally {
+      setErrorMessage(getAuthErrorMessage(requestError))
       setIsBusy(false)
     }
   }
@@ -144,16 +90,13 @@ function App() {
 
     setIsBusy(true)
     try {
-      await callApi<AuthAccount, { username: string; email: string; password: string }>(
-        'signup',
-        { username: username.trim(), email: email.trim(), password },
-      )
+      await signUp(username, email, password)
       setIdentifier(username.trim())
       setPassword('')
       changeView('sign-in')
       setSuccessMessage('Your account has been created. Follow any verification email, then sign in after approval.')
     } catch (requestError) {
-      setErrorMessage(getErrorMessage(requestError))
+      setErrorMessage(getAuthErrorMessage(requestError))
     } finally {
       setIsBusy(false)
     }
@@ -166,82 +109,57 @@ function App() {
     setIsBusy(true)
 
     try {
-      await callApi<{ success: boolean; message?: string }, { username: string }>(
-        'forgotPassword',
-        { username: identifier.trim() },
-      )
+      await requestPasswordReset(identifier)
       setSuccessMessage('If an account matches that identifier, a password reset link will be sent.')
     } catch (requestError) {
-      setErrorMessage(getErrorMessage(requestError))
+      setErrorMessage(getAuthErrorMessage(requestError))
     } finally {
       setIsBusy(false)
     }
-  }
-
-  const handleSignOut = () => {
-    clearAuthSession()
-    setAccount(null)
-    setIdentifier('')
-    setPassword('')
-    setRememberMe(false)
-    setErrorMessage('')
-    setSuccessMessage('')
-  }
-
-  if (isCheckingSession) {
-    return (
-      <main className="checking-screen" aria-label="Restoring your session">
-        <span className="loading-indicator" />
-        <p>Restoring your workspace...</p>
-      </main>
-    )
-  }
-
-  if (account) {
-    return <DashboardPage account={account} onSignOut={handleSignOut} />
   }
 
   const isSignIn = view === 'sign-in'
   const isSignUp = view === 'sign-up'
 
   return (
-    <main className="auth-layout">
+    <main className="auth-layout app-enter-fade">
       <section className="auth-visual" aria-label="Carpenter Pro material studio">
        
         <div className="visual-shade" />
         <div className="visual-brand"><Brand /></div>
         <div className="visual-copy">
           <span>CARPENTER PRO</span>
-          <h1>{isSignUp ? 'Get Started with Us' : isSignIn ? 'Welcome Back to Your Studio' : 'Let’s Get You Back In'}</h1>
+          <div className="visual-title">{isSignUp ? 'Get Started with Us' : isSignIn ? 'Welcome Back to Your Studio' : 'Let’s Get You Back In'}</div>
           <p>{isSignUp
             ? 'Complete these steps to register your account.'
             : isSignIn
               ? 'Sign in to continue creating thoughtful material previews for your clients.'
               : 'Follow a few simple steps to return to your material studio.'}</p>
-          <ol className="auth-steps" aria-label="Carpenter account steps">
-            <li className={isSignUp ? 'is-active' : ''}>
-              <span>1</span><strong>Sign up your account</strong>
-            </li>
-            <li>
-              <span>2</span><strong>Set up your workspace</strong>
-            </li>
-            <li className={isSignIn ? 'is-active' : ''}>
-              <span>3</span><strong>Set up your profile</strong>
-            </li>
-          </ol>
+          {isSignUp ? (
+            <ol className="auth-steps" aria-label="Carpenter account steps">
+              <li className="is-active" aria-current="step">
+                <span>1</span><strong>Sign up your account</strong>
+              </li>
+              <li>
+                <span>2</span><strong>Set up your workspace</strong>
+              </li>
+              <li>
+                <span>3</span><strong>Set up your profile</strong>
+              </li>
+            </ol>
+          ) : null}
         </div>
-        <span className="visual-index" aria-hidden="true">01 / 03</span>
       </section>
 
       <section className="auth-main">
         <div className="auth-mobile-brand"><Brand /></div>
-        <div className="auth-content">
+        <div className="auth-content" key={view}>
           <span className="auth-kicker">
             {isSignIn ? 'CARPENTER PRO' : isSignUp ? 'NEW ACCOUNT' : 'ACCOUNT RECOVERY'}
           </span>
-          <h2>
+          <h1>
             {isSignIn ? 'Welcome back' : isSignUp ? 'Sign Up Account' : 'Reset password'}
-          </h2>
+          </h1>
           <p className="auth-intro">
             {isSignIn
               ? 'Enter your account details to continue.'
@@ -250,8 +168,8 @@ function App() {
                 : 'Enter the username associated with your account and we will send a reset link.'}
           </p>
 
-          {errorMessage ? <p className="form-message form-error" role="alert">{errorMessage}</p> : null}
-          {successMessage ? <p className="form-message form-success" role="status">{successMessage}</p> : null}
+          {errorMessage ? <Alert tone="error" className="form-message">{errorMessage}</Alert> : null}
+          {successMessage ? <Alert tone="success" className="form-message">{successMessage}</Alert> : null}
 
           {isSignIn ? (
             <form className="auth-form" onSubmit={handleSignIn}>
@@ -281,9 +199,9 @@ function App() {
                   />
                   <Button
                     variant="ghost"
-                    size="icon"
+                    iconOnly
                     className="password-visibility"
-                    aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                    aria-label="Show password"
                     aria-pressed={passwordVisible}
                     onClick={() => setPasswordVisible((visible) => !visible)}
                   >
@@ -300,11 +218,11 @@ function App() {
                   />
                   <span>Remember me</span>
                 </label>
-                <Button variant="text" size="sm" className="text-button" onClick={() => changeView('forgot-password')}>
+                <Button variant="link" size="sm" className="text-button" onClick={() => changeView('forgot-password')}>
                   Forgot password?
                 </Button>
               </div>
-              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Signing in...">
+              <Button variant="primary" size="lg" fullWidth type="submit" loading={isBusy} loadingLabel="Signing in...">
                 Sign in <span aria-hidden="true">&#8594;</span>
               </Button>
             </form>
@@ -353,9 +271,9 @@ function App() {
                     />
                     <Button
                       variant="ghost"
-                      size="icon"
+                      iconOnly
                       className="password-visibility"
-                      aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+                      aria-label="Show password"
                       aria-pressed={passwordVisible}
                       onClick={() => setPasswordVisible((visible) => !visible)}
                     >
@@ -377,9 +295,9 @@ function App() {
                     />
                     <Button
                       variant="ghost"
-                      size="icon"
+                      iconOnly
                       className="password-visibility"
-                      aria-label={confirmPasswordVisible ? 'Hide confirmation password' : 'Show confirmation password'}
+                      aria-label="Show confirmation password"
                       aria-pressed={confirmPasswordVisible}
                       onClick={() => setConfirmPasswordVisible((visible) => !visible)}
                     >
@@ -388,7 +306,7 @@ function App() {
                   </span>
                 </label>
               </div>
-              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Creating account...">
+              <Button variant="primary" size="lg" fullWidth type="submit" loading={isBusy} loadingLabel="Creating account...">
                 Sign Up <span aria-hidden="true">&#8594;</span>
               </Button>
             </form>
@@ -408,7 +326,7 @@ function App() {
                   required
                 />
               </label>
-              <Button variant="primary" size="lg" className="submit-button" type="submit" loading={isBusy} loadingLabel="Sending link...">
+              <Button variant="primary" size="lg" fullWidth type="submit" loading={isBusy} loadingLabel="Sending link...">
                 Send reset link <span aria-hidden="true">&#8594;</span>
               </Button>
             </form>
@@ -416,9 +334,9 @@ function App() {
 
           <div className="auth-switch">
             {isSignIn ? (
-              <p>New to Carpenter Pro? <Button variant="text" size="sm" className="text-button" onClick={() => changeView('sign-up')}>Sign up</Button></p>
+              <p>New to Carpenter Pro? <Button variant="link" size="sm" className="text-button" onClick={() => changeView('sign-up')}>Sign up</Button></p>
             ) : (
-                <p>Already have an account? <Button variant="text" size="sm" className="text-button" onClick={() => changeView('sign-in')}>Log in</Button></p>
+                <p>Already have an account? <Button variant="link" size="sm" className="text-button" onClick={() => changeView('sign-in')}>Log in</Button></p>
             )}
           </div>
           <p className="auth-terms">By continuing, you agree to use Carpenter Pro in accordance with your organization's access policies.</p>
@@ -429,4 +347,4 @@ function App() {
   )
 }
 
-export default App
+export default AuthPage

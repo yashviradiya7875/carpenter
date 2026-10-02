@@ -1,0 +1,6 @@
+/* Default size; feature styles resize icons in context (e.g. `.dropzone-icon .mark-icon`). */
+.mark-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}

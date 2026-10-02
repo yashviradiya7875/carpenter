@@ -1,0 +1,91 @@
+.app-alert {
+  animation: app-content-in var(--duration-base) var(--ease-out) backwards;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+  border: var(--border-width) solid var(--app-alert-line);
+  border-radius: var(--radius-control);
+  background: var(--app-alert-bg);
+  color: var(--app-alert-text);
+  padding: var(--space-2-5) var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.app-alert--info {
+  --app-alert-text: var(--color-info-text);
+  --app-alert-bg: var(--color-info-bg);
+  --app-alert-line: var(--color-info-line);
+}
+
+.app-alert--success {
+  --app-alert-text: var(--color-success-text);
+  --app-alert-bg: var(--color-success-bg);
+  --app-alert-line: var(--color-success-line);
+}
+
+.app-alert--warning {
+  --app-alert-text: var(--color-warning-text);
+  --app-alert-bg: var(--color-warning-bg);
+  --app-alert-line: var(--color-warning-line);
+}
+
+.app-alert--error {
+  --app-alert-text: var(--color-danger-text);
+  --app-alert-bg: var(--color-danger-bg);
+  --app-alert-line: var(--color-danger-line);
+}
+
+.app-alert .app-alert-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.app-alert-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-alert-title {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-alert-title + .app-alert-content {
+  margin-top: var(--space-0-5);
+}
+
+.app-alert-dismiss {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  margin: -2px -4px -2px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: var(--transition-colors), opacity var(--duration-fast) var(--ease-standard);
+}
+
+.app-alert-dismiss:hover {
+  background: var(--color-surface-hover);
+  opacity: 1;
+}
+
+.app-alert-dismiss .app-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@media (pointer: coarse) {
+  .app-alert-dismiss {
+    width: 40px;
+    height: 40px;
+    margin-block: -8px;
+  }
+}

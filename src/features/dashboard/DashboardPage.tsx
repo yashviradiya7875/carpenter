@@ -1,59 +1,37 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { ApiError, callApi, callApiMultipart } from '../../shared/api/client'
+import { ApiError } from '../../shared/api/client'
 import type { AuthAccount } from '../../shared/auth/types'
-import { Brand, Mark } from './components/DashboardIcon'
+import { Mark } from '../../shared/components/Mark'
+import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
 import { LibraryDialog } from './components/LibraryDialog'
+import { MaterialPill } from './components/MaterialPill'
+import { OverviewStat } from './components/OverviewStat'
 import { UploadOptionsDialog } from './components/UploadOptionsDialog'
-import { UPLOAD_TYPES, type Collection, type MaterialChoice, type MaterialSlot, type Product, type ProductDetails, type UploadType } from './dashboardTypes'
-import { FilesPage } from '../files/FilesPage'
+import {
+  createLaminateCollection,
+  deleteCollection,
+  deleteProduct,
+  generateCarpenterRender,
+  getProduct,
+  getShareStats,
+  getUserCredits,
+  listCollectionProducts,
+  listLaminateCollections,
+  uploadLaminateProducts,
+  type GenerationResult,
+  type ShareStats,
+} from './dashboardService'
+import { UPLOAD_TYPES, type Collection, type MaterialChoice, type MaterialSlot, type Product, type UploadType } from './dashboardTypes'
+import { fileToMaterial, MAX_MULTI_PRODUCT_FILES, MAX_RENDER_MATERIAL_BYTES, productToMaterial } from './materials'
 import './DashboardPage.css'
 
-type ShareStats = {
-  total?: number
-  uniqueClients?: number
-  followUps?: { overdue?: number; dueToday?: number; upcoming?: number }
-}
-type GenerationResult = { imageUrl?: string; generationId?: string }
-type DashboardPageProps = { account: AuthAccount; onSignOut: () => void }
-const MAX_RENDER_MATERIAL_BYTES = 20 * 1024 * 1024
-const MAX_MULTI_PRODUCT_FILES = 200
-
-function roleLabel(role: string): string {
-  if (role === 'organization') return 'Manufacturer'
-  if (role === 'org_user') return 'Sponsored Dealer'
-  if (role === 'user') return 'Dealer Pro'
-  return role
-}
-
-function initials(name: string): string {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || 'CP'
-}
-
-function fileToMaterial(file: File): Promise<MaterialChoice> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result !== 'string') {
-        reject(new Error(`Could not read ${file.name}.`))
-        return
-      }
-      const base64 = reader.result.split(',')[1]
-      if (!base64) {
-        reject(new Error(`Could not read ${file.name}.`))
-        return
-      }
-      resolve({
-        id: `${file.name}-${file.lastModified}`,
-        name: file.name,
-        base64,
-        mimeType: file.type || 'image/jpeg',
-        imageUrl: reader.result,
-        source: 'upload',
-      })
-    }
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
-    reader.readAsDataURL(file)
-  })
+type DashboardPageProps = {
+  account: AuthAccount
+  /** Hidden (but kept mounted) while another view is open, so work in progress survives. */
+  hidden?: boolean
+  onOpenFiles: () => void
+  /** Reports the balance after a render spends credits; the global header shows it. */
+  onCreditsChange: (credits: number) => void
 }
 
 function updateOverviewAtmosphere(event: ReactPointerEvent<HTMLElement>): void {
@@ -76,11 +54,10 @@ function messageFor(error: unknown): string {
   return 'Something went wrong. Please try again.'
 }
 
-function DashboardPage({ account, onSignOut }: DashboardPageProps) {
+function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }: DashboardPageProps) {
   const [primaryMaterial, setPrimaryMaterial] = useState<MaterialChoice | null>(null)
   const [accentMaterial, setAccentMaterial] = useState<MaterialChoice | null>(null)
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
-  const [isFilesOpen, setIsFilesOpen] = useState(false)
   const [isUploadOptionsOpen, setIsUploadOptionsOpen] = useState(false)
   const [selectedUploadType, setSelectedUploadType] = useState<UploadType | null>(null)
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -99,16 +76,11 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
   const [render, setRender] = useState<GenerationResult | null>(null)
-  const [credits, setCredits] = useState(account.credits)
   const [shareStats, setShareStats] = useState<ShareStats | null>(null)
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
-  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const overviewTrigger = useRef<HTMLButtonElement>(null)
   const overviewCollapse = useRef<HTMLButtonElement>(null)
   const overviewWasOpen = useRef(false)
-  const uploadTrigger = useRef<HTMLButtonElement>(null)
-  const uploadDialog = useRef<HTMLElement>(null)
-  const uploadDialogWasOpen = useRef(false)
   const singleImageInput = useRef<HTMLInputElement>(null)
   const multipleImagesInput = useRef<HTMLInputElement>(null)
   const videoInput = useRef<HTMLInputElement>(null)
@@ -119,15 +91,14 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
   const canUpload = capabilities?.canUploadLaminate === true
   const canBrowseLibrary = Boolean(capabilities?.laminateSource && capabilities.laminateSource !== 'none')
   const canOpenFiles = Boolean(capabilities?.filesAccess && capabilities.filesAccess !== 'none')
-  const userName = account.displayName || account.username
+
+  useEffect(() => {
+    if (!hidden) document.title = 'Studio · Carpenter Pro'
+  }, [hidden])
 
   useEffect(() => {
     const controller = new AbortController()
-    callApi<ShareStats, { username: string }>(
-      'getShareStats',
-      { username: account.username },
-      { signal: controller.signal },
-    )
+    getShareStats(account.username, { signal: controller.signal })
       .then(setShareStats)
       .catch(() => setShareStats(null))
     return () => controller.abort()
@@ -144,26 +115,6 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
       browserFolderInput.directory = ''
     }
   }, [])
-
-  useEffect(() => {
-    if (!isUploadOptionsOpen) {
-      if (uploadDialogWasOpen.current) {
-        uploadDialogWasOpen.current = false
-        uploadTrigger.current?.focus()
-      }
-      return
-    }
-
-    uploadDialogWasOpen.current = true
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsUploadOptionsOpen(false)
-    }
-    window.addEventListener('keydown', handleEscape)
-    window.requestAnimationFrame(() => {
-      uploadDialog.current?.querySelector<HTMLButtonElement>('[data-upload-option]')?.focus()
-    })
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [isUploadOptionsOpen])
 
   useEffect(() => {
     if (!isOverviewOpen) {
@@ -276,21 +227,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
 
     try {
       setIsLibraryLoading(true)
-      const formData = new FormData()
-      uniqueFiles.forEach((file) => formData.append('files', file))
-      formData.append('collectionId', collectionId)
-      formData.append('type', 'laminate')
-      formData.append('autoPublish', '1')
-      formData.append('paths', JSON.stringify(uniqueFiles.map((file) => {
-        const fileWithPath = file as File & { webkitRelativePath?: string }
-        return fileWithPath.webkitRelativePath || file.name
-      })))
-      formData.append('username', account.username)
-
-      const result = await callApiMultipart<{ success?: boolean; collection?: Collection; productsCreated?: number; products?: Product[] }>(
-        'uploadProducts',
-        formData,
-      )
+      const result = await uploadLaminateProducts(account.username, collectionId, uniqueFiles)
 
       if (result.collection) {
         setCollections((current) => {
@@ -331,15 +268,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
 
     try {
       setIsLibraryLoading(true)
-      const collection = await callApi<Collection, {
-        username: string; name: string; type: string; description: string; isShared: boolean
-      }>('createCollection', {
-        username: account.username,
-        name: trimmed,
-        type: 'laminate',
-        description: 'Created from Carpenter Pro library',
-        isShared: false,
-      })
+      const collection = await createLaminateCollection(account.username, trimmed)
 
       setCollections((current) => [collection, ...current])
       setSelectedLibraryCollectionId(collection.id)
@@ -373,16 +302,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setIsLibraryOpen(true)
     setIsLibraryLoading(true)
     try {
-      const result = await callApi<{ collections: Collection[] }, {
-        username: string; type: string; page: number; pageSize: number; search: string
-      }>('listCollections', {
-        username: account.username,
-        type: 'laminate',
-        page: 1,
-        pageSize: 40,
-        search: searchOverride,
-      })
-      const nextCollections = result.collections ?? []
+      const nextCollections = await listLaminateCollections(account.username, searchOverride)
       setCollections(nextCollections)
       const firstCollection = nextCollections[0]
       setSelectedLibraryCollectionId(firstCollection?.id ?? '')
@@ -410,17 +330,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setLibraryNotice('')
     setIsLibraryLoading(true)
     try {
-      const result = await callApi<{ products: Product[] }, {
-        username: string; collectionId: string; type: string; page: number; pageSize: number; search: string
-      }>('listProducts', {
-        username: account.username,
-        collectionId: collection.id,
-        type: 'laminate',
-        page: 1,
-        pageSize: 40,
-        search: searchOverride,
-      })
-      const resultProducts = result.products ?? []
+      const resultProducts = await listCollectionProducts(account.username, collection.id, searchOverride)
       setProducts(resultProducts)
       if (resultProducts.length) setSelectedLibraryProductId(resultProducts[0].id)
     } catch (error) {
@@ -436,11 +346,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setDeletingProductId(product.id)
 
     try {
-      const result = await callApi<{ success: boolean }, { username: string; productId: string }>(
-        'deleteProduct',
-        { username: account.username, productId: product.id },
-      )
-      if (!result.success) throw new ApiError('The product could not be deleted.')
+      await deleteProduct(account.username, product.id)
 
       const collectionId = activeCollection?.id
       const nextCount = Math.max(0, (activeCollection?.productCount ?? products.length) - 1)
@@ -470,11 +376,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setDeletingCollectionId(collection.id)
 
     try {
-      const result = await callApi<{ success: boolean }, { username: string; collectionId: string }>(
-        'deleteCollection',
-        { username: account.username, collectionId: collection.id },
-      )
-      if (!result.success) throw new ApiError('The collection could not be deleted.')
+      await deleteCollection(account.username, collection.id)
 
       const remainingCollections = collections.filter((item) => item.id !== collection.id)
       setCollections(remainingCollections)
@@ -501,19 +403,7 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setLibraryError('')
     setIsLibraryLoading(true)
     try {
-      const result = await callApi<ProductDetails, { username: string; productId: string }>(
-        'getProduct',
-        { username: account.username, productId: product.id },
-      )
-      const image = result.product?.images?.[0]
-      if (!result.product || !image) throw new Error('This material does not have a usable image.')
-      const choice: MaterialChoice = {
-        id: `product-${result.product.id}`,
-        name: result.product.name,
-        imageId: image.id,
-        imageUrl: image.thumbUrl || image.url || product.thumbUrl || product.coverThumbUrl || product.imageUrl,
-        source: 'library',
-      }
+      const choice = productToMaterial(await getProduct(account.username, product.id), product)
       if (librarySlot === 'primary') setPrimaryMaterial(choice)
       else setAccentMaterial(choice)
       setIsLibraryOpen(false)
@@ -536,34 +426,9 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     setIsGenerating(true)
     setGenerationError('')
     try {
-      const data: Record<string, unknown> = {
-        username: account.username,
-        scene: {
-          name: 'Contemporary interior',
-          prompt: '',
-        },
-        prompt: '',
-        creativeMode: false,
-        decorateRoom: false,
-        aspectRatio: '4:3',
-      }
-      if (primaryMaterial.imageId) data.laminateImageId = primaryMaterial.imageId
-      else {
-        data.laminateBase64 = primaryMaterial.base64
-        data.laminateMimeType = primaryMaterial.mimeType
-      }
-      if (accentMaterial?.imageId) data.accentLaminateImageId = accentMaterial.imageId
-      else if (accentMaterial?.base64) {
-        data.accentLaminateBase64 = accentMaterial.base64
-        data.accentLaminateMimeType = accentMaterial.mimeType
-      }
-      const result = await callApi<GenerationResult, Record<string, unknown>>('generateCarpenter', data)
-      setRender(result)
-      const creditResult = await callApi<{ credits: number }, { username: string }>(
-        'getUserCredits',
-        { username: account.username },
-      ).catch(() => null)
-      if (typeof creditResult?.credits === 'number') setCredits(creditResult.credits)
+      setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial))
+      const remainingCredits = await getUserCredits(account.username).catch(() => null)
+      if (typeof remainingCredits === 'number') onCreditsChange(remainingCredits)
     } catch (error) {
       setGenerationError(messageFor(error))
     } finally {
@@ -587,44 +452,15 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
     return product.name.toLowerCase().includes(target)
   })
 
-  if (isFilesOpen) {
-    return <FilesPage account={account} onBack={() => setIsFilesOpen(false)} onSignOut={onSignOut} />
-  }
-
   return (
     <main
-      className="carpenter-dashboard"
+      className={`carpenter-dashboard app-enter-fade ${isOverviewOpen ? 'is-overview-open' : ''}`}
+      hidden={hidden}
       onPointerMove={updateOverviewAtmosphere}
       onPointerLeave={resetOverviewAtmosphere}
     >
-      <header className="dashboard-topbar">
-        <Brand />
-        <div className="dashboard-topbar-actions">
-          {typeof credits === 'number' ? (
-            <div className="credit-balance"><Mark name="spark" /><span>{credits}</span><span>Credits left</span></div>
-          ) : null}
-          <div className="profile-control">
-            <button
-              className="profile-trigger"
-              type="button"
-              aria-label="Open account menu"
-              aria-expanded={isProfileOpen}
-              onClick={() => setIsProfileOpen((open) => !open)}
-            >
-              <span>{initials(userName)}</span>
-            </button>
-            {isProfileOpen ? (
-              <div className="profile-menu">
-                <strong>{userName}</strong>
-                <span>{roleLabel(account.role)}</span>
-                <button type="button" onClick={onSignOut}>Sign out</button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
-      <div className="dashboard-content">
+      <AnimatedGridPattern className="dashboard-grid" width={44} height={44} numSquares={24} duration={4} />
+      <div className="dashboard-content" inert={isOverviewOpen}>
         <section className="workspace-intro" aria-labelledby="workspace-title">
           <h1 id="workspace-title">Bring your laminates to life.</h1>
           <p>Turn a material into a space your clients can imagine.</p>
@@ -675,20 +511,21 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
             tabIndex={-1}
           />
           <button
-            ref={uploadTrigger}
-            className={`material-dropzone ${canUpload ? '' : 'is-restricted'}`}
+            className={`material-dropzone ${canUpload || canBrowseLibrary ? '' : 'is-restricted'}`}
             type="button"
-            disabled={!canUpload}
-            onClick={openUploadOptions}
+            disabled={!canUpload && !canBrowseLibrary}
+            onClick={canUpload ? openUploadOptions : () => void openLibrary('primary')}
           >
             <span className="dropzone-icon"><Mark name={canUpload ? 'upload' : 'folder'} /></span>
             <span className="dropzone-copy">
-              <strong>{canUpload ? 'Upload custom artwork / texture' : 'Choose from your manufacturer library'}</strong>
+              <strong>{canUpload
+                ? 'Upload custom artwork / texture'
+                : canBrowseLibrary ? 'Choose from your manufacturer library' : 'Uploads aren’t available for this account'}</strong>
               <small>{canUpload
                 ? selectedUploadType
                   ? `${UPLOAD_TYPES.find((option) => option.id === selectedUploadType)?.title} selected · click to change`
                   : 'Choose single product, multi product, or reel / video'
-                : 'Uploads are restricted for this account'}</small>
+                : canBrowseLibrary ? 'Browse the laminate collections shared with you' : 'Contact your organization administrator for access.'}</small>
             </span>
           </button>
 
@@ -704,50 +541,60 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
           ) : null}
 
           {pendingFiles.length ? (
-            <div className="pending-files-summary" role="status">
+            <div className="pending-files-summary app-enter" role="status">
               <span className="pending-files-copy">
                 <strong>{pendingFiles.length} {selectedUploadType === 'reel' ? 'video' : 'product image'}{pendingFiles.length === 1 ? '' : 's'} selected</strong>
                 <small>{pendingFiles.slice(0, 2).map((file) => file.name).join(', ')}{pendingFiles.length > 2 ? ` +${pendingFiles.length - 2} more` : ''}</small>
               </span>
-              <button type="button" onClick={() => setPendingFiles([])}>Clear</button>
+              <Button variant="link" size="xs" onClick={() => setPendingFiles([])}>Clear</Button>
             </div>
           ) : null}
 
           <div className="composer-toolbar">
             <div className="composer-shortcuts">
               {canOpenFiles ? (
-                <button className="utility-button" type="button" onClick={() => setIsFilesOpen(true)}>
-                  <Mark name="folder" /> Files
-                </button>
+                <Button variant="ghost" size="xs" shape="pill" icon="folder" onClick={onOpenFiles}>
+                  Files
+                </Button>
               ) : null}
-              <button className="utility-button" type="button" disabled title="QR tools will be added in the sharing workflow">
-                <Mark name="qr" /> QR Code
-              </button>
+              <Button variant="ghost" size="xs" shape="pill" icon="qr" disabled title="QR tools will be added in the sharing workflow">
+                QR Code
+              </Button>
             </div>
             <div className="composer-actions">
               {canBrowseLibrary ? (
-                <button className="browse-button" type="button" onClick={() => void openLibrary('primary')}>
-                  <Mark name="image" /> Browse library
-                </button>
+                <Button size="xs" shape="pill" icon="image" onClick={() => void openLibrary('primary')}>
+                  Browse library
+                </Button>
               ) : null}
               {primaryMaterial && canBrowseLibrary ? (
-                <button className="accent-pick-button" type="button" onClick={() => void openLibrary('accent')}>
+                <Button variant="outline" size="xs" shape="pill" onClick={() => void openLibrary('accent')}>
                   Add accent
-                </button>
+                </Button>
               ) : null}
-              <button
-                className="generate-button"
-                type="button"
+              <Button
+                variant="primary"
+                size="xs"
+                shape="pill"
+                icon="spark"
                 onClick={() => void generateRender()}
-                disabled={isGenerating || selectedUploadType === 'multi' || selectedUploadType === 'reel'}
+                disabled={selectedUploadType === 'multi' || selectedUploadType === 'reel'}
+                loading={isGenerating}
+                loadingLabel="Generating…"
                 title={selectedUploadType === 'multi' || selectedUploadType === 'reel' ? 'This upload workflow is not connected yet' : undefined}
               >
-                <Mark name="spark" /> {isGenerating ? 'Generating…' : 'Generate'}
-              </button>
+                Generate
+              </Button>
             </div>
           </div>
-          {generationError ? <p className="dashboard-message" role="alert">{generationError}</p> : null}
-          {isGenerating ? <p className="generation-status" role="status">Creating your render. This can take a few minutes.</p> : null}
+          {generationError ? <Alert tone="error" className="dashboard-message">{generationError}</Alert> : null}
+          {isGenerating ? <Alert tone="info" className="dashboard-message">Creating your render. This can take a few minutes.</Alert> : null}
+          {render?.imageUrl && !isGenerating ? (
+            <Alert tone="success" className="dashboard-message">
+              Your render is ready.{' '}
+              <Button variant="link" size="xs" className="dashboard-message-action" onClick={() => setIsOverviewOpen(true)}>View render</Button>
+            </Alert>
+          ) : null}
         </section>
 
         <section
@@ -758,17 +605,18 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         >
           <header className="overview-header">
             <h2 id="overview-title">Overview</h2>
-            <button
+            <Button
               ref={overviewTrigger}
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon="expand"
               className="overview-toggle"
-              type="button"
               aria-label="Expand overview"
               aria-expanded={isOverviewOpen}
               aria-controls="overview-expanded"
               onClick={() => setIsOverviewOpen(true)}
-            >
-              <Mark name="expand" />
-            </button>
+            />
           </header>
         </section>
       </div>
@@ -781,6 +629,9 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         <section
           className="overview-expanded"
           id="overview-expanded"
+          onKeyDown={(event) => {
+            if (event.key === 'Tab') trapFocus(event.nativeEvent, event.currentTarget)
+          }}
           role="dialog"
           aria-modal={isOverviewOpen}
           aria-labelledby="overview-expanded-title"
@@ -789,16 +640,17 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         >
           <header className="overview-header overview-expanded-header">
             <h2 id="overview-expanded-title">Overview</h2>
-            <button
+            <Button
               ref={overviewCollapse}
-              className="overview-toggle overview-collapse"
-              type="button"
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon="close"
+              className="overview-toggle"
               aria-label="Collapse overview"
               onClick={() => setIsOverviewOpen(false)}
               tabIndex={isOverviewOpen ? 0 : -1}
-            >
-              <Mark name="close" />
-            </button>
+            />
           </header>
           <div className="overview-body">
             <div className="overview-stats">
@@ -822,14 +674,12 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
         </section>
       </div>
 
-      {isUploadOptionsOpen ? (
-        <UploadOptionsDialog
-          selectedUploadType={selectedUploadType}
-          dialogRef={uploadDialog}
-          onClose={closeUploadOptions}
-          onSelect={selectUploadType}
-        />
-      ) : null}
+      <UploadOptionsDialog
+        open={isUploadOptionsOpen}
+        selectedUploadType={selectedUploadType}
+        onClose={closeUploadOptions}
+        onSelect={selectUploadType}
+      />
 
       {isLibraryOpen ? (
         <LibraryDialog
@@ -866,20 +716,6 @@ function DashboardPage({ account, onSignOut }: DashboardPageProps) {
       ) : null}
     </main>
   )
-}
-
-function MaterialPill({ label, material, onRemove }: { label: string; material: MaterialChoice; onRemove: () => void }) {
-  return (
-    <div className="material-pill">
-      {material.imageUrl ? <img src={material.imageUrl} alt="" /> : <span className="material-pill-placeholder"><Mark name="image" /></span>}
-      <span><small>{label} material</small><strong>{material.name}</strong></span>
-      <button type="button" aria-label={`Remove ${label.toLowerCase()} material`} onClick={onRemove}><Mark name="close" /></button>
-    </div>
-  )
-}
-
-function OverviewStat({ label, value }: { label: string; value: string }) {
-  return <div className="overview-stat"><span>{label}</span><strong>{value}</strong></div>
 }
 
 export default DashboardPage

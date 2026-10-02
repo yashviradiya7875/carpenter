@@ -1,0 +1,157 @@
+/*
+ * Base layer: document defaults, accessibility utilities and shared keyframes.
+ * Everything here is low-specificity so feature styles can override it.
+ */
+
+:root {
+  font-family: var(--font-ui);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+  background: var(--color-canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Brand focus ring for keyboard users. :where() keeps it overridable. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* `hidden` must win over component display rules. */
+[hidden] {
+  display: none !important;
+}
+
+/* Visually hidden but available to assistive technology */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Legacy loading indicator used across features; the Spinner component renders the same visual. */
+.loading-indicator {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: app-spin var(--duration-spin) linear infinite;
+}
+
+/* ------------------------------------------------------------------- motion */
+/*
+ * Motion is enter-only, short and small: elements fade in and travel at most 8px.
+ * Use `backwards` fill so the element's own styles (including transforms) apply
+ * once the animation ends.
+ */
+
+@keyframes app-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Pages, overlays, delayed loading indicators */
+@keyframes app-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Content that appears in place: lists, alerts, empty states, panels */
+@keyframes app-content-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Dialogs */
+@keyframes app-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Dialogs presented as bottom sheets on phones */
+@keyframes app-sheet-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Menus and popovers, scaling from their anchor (set transform-origin) */
+@keyframes app-pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Side panels entering from the inline end */
+@keyframes app-slide-in-end {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Set for one frame by ThemeProvider so a theme switch repaints at once. */
+.app-theme-switching *,
+.app-theme-switching *::before,
+.app-theme-switching *::after {
+  transition: none !important;
+}
+
+/* Enter utilities for feature markup */
+.app-enter {
+  animation: app-content-in var(--duration-base) var(--ease-out) backwards;
+}
+
+.app-enter-fade {
+  animation: app-fade-in var(--duration-base) var(--ease-standard) backwards;
+}
+
+.app-enter-end {
+  animation: app-slide-in-end var(--duration-base) var(--ease-out) backwards;
+}
+
+/*
+ * Reduced motion: remove animation and transitions everywhere. Spinners keep a slow
+ * rotation so loading stays perceivable.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .app-spinner-ring,
+  .app-button-spinner,
+  .loading-indicator {
+    animation: app-spin 1.6s linear infinite !important;
+  }
+}

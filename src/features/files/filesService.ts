@@ -271,3 +271,58 @@ export async function uploadDriveImage(username: string, file: File, folderId: s
     createdAt: new Date().toISOString(),
   }
 }
+
+/* ------------------------------------------------------------------ sharing */
+
+export type ShareDraft = {
+  visibility: 'private' | 'organization' | 'public'
+  permissions: Record<string, DriveRole>
+}
+
+const DRIVE_ROLES: DriveRole[] = ['owner', 'admin', 'editor', 'viewer']
+
+/** Normalizes a getResourceShares response (several legacy shapes) into an editable draft. */
+export function asShareDraft(value: unknown): ShareDraft {
+  const record = isRecord(value) ? value : {}
+  const rawPermissions = isRecord(record.permissions) ? record.permissions : {}
+  const permissions: Record<string, DriveRole> = {}
+
+  Object.entries(rawPermissions).forEach(([username, role]) => {
+    if (typeof role === 'string' && DRIVE_ROLES.includes(role as DriveRole)) permissions[username] = role as DriveRole
+  })
+
+  if (Array.isArray(record.sharedWith)) {
+    record.sharedWith.forEach((username) => {
+      if (typeof username === 'string' && !permissions[username]) permissions[username] = 'viewer'
+    })
+  }
+
+  if (Array.isArray(record.shares)) {
+    record.shares.forEach((share) => {
+      const username = getString(share, 'username', 'userName')
+      const role = getString(share, 'role', 'permission')
+      if (username && role && DRIVE_ROLES.includes(role as DriveRole)) permissions[username] = role as DriveRole
+    })
+  }
+
+  const visibility = record.visibility === 'organization' || record.visibility === 'public'
+    ? record.visibility
+    : 'private'
+
+  return { visibility, permissions }
+}
+
+/** Finds the active share-link token in a getResourceShares response, if any. */
+export function shareLinkToken(value: unknown): string | null {
+  if (!isRecord(value)) return null
+  const directToken = getString(value, 'token', 'shareToken')
+  if (directToken) return directToken
+  if (Array.isArray(value.links)) {
+    for (const link of value.links) {
+      const token = getString(link, 'token', 'shareToken')
+      if (token) return token
+    }
+  }
+  const nested = isRecord(value.shareLink) ? value.shareLink : isRecord(value.link) ? value.link : null
+  return nested ? getString(nested, 'token', 'shareToken') ?? null : null
+}

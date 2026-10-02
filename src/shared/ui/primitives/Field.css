@@ -1,0 +1,165 @@
+/* -------------------------------------------------------------------- Field */
+
+.app-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.app-field-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+.app-field-required {
+  margin-left: var(--space-0-5);
+  color: var(--color-accent-light);
+}
+
+.app-field-hint,
+.app-field-error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.app-field-hint {
+  color: var(--color-muted);
+}
+
+.app-field-error {
+  animation: app-fade-in var(--duration-fast) var(--ease-standard) backwards;
+  color: var(--color-danger-text);
+}
+
+/* ------------------------------------------------------------------ Control */
+
+.app-control {
+  --app-control-height: var(--control-height-md);
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.app-control--sm { --app-control-height: var(--control-height-sm); }
+.app-control--md { --app-control-height: var(--control-height-md); }
+.app-control--lg { --app-control-height: var(--control-height-lg); }
+
+.app-control-input {
+  width: 100%;
+  min-width: 0;
+  height: var(--app-control-height);
+  border: var(--border-width) solid var(--color-field-line);
+  border-radius: var(--radius-control);
+  outline: none;
+  background: var(--color-field-bg);
+  color: var(--color-text);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  transition: var(--transition-colors);
+}
+
+.app-control-input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.app-control-input:hover:not(:disabled) {
+  border-color: var(--color-field-line-hover);
+}
+
+.app-control-input:focus {
+  border-color: var(--color-accent);
+  background: var(--color-field-bg-focus);
+  box-shadow: var(--focus-glow);
+}
+
+.app-control-input:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.app-control-input[aria-invalid='true'] {
+  border-color: var(--color-danger-line);
+}
+
+.app-control-input[aria-invalid='true']:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-bg);
+}
+
+.app-control-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+/* Icon and end slot */
+.app-control .app-control-icon {
+  position: absolute;
+  left: var(--space-3);
+  width: 15px;
+  height: 15px;
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
+.app-control.has-start .app-control-input {
+  padding-left: calc(var(--space-3) + 15px + var(--space-2));
+}
+
+.app-control-end {
+  position: absolute;
+  right: var(--space-1);
+  display: flex;
+  align-items: center;
+}
+
+.app-control.has-end .app-control-input {
+  padding-right: calc(var(--app-control-height) + var(--space-1));
+}
+
+.app-control-end .app-button--icon-only {
+  --app-button-height: calc(var(--app-control-height) - 8px);
+}
+
+/* Select */
+.app-control--select .app-control-input {
+  appearance: none;
+  padding-right: calc(var(--space-3) + 14px + var(--space-2));
+  cursor: pointer;
+}
+
+.app-control--select .app-control-input option {
+  background: var(--color-surface-overlay);
+  color: var(--color-text);
+}
+
+.app-control .app-control-chevron {
+  position: absolute;
+  right: var(--space-3);
+  width: 14px;
+  height: 14px;
+  color: var(--color-muted);
+  transform: rotate(90deg);
+  pointer-events: none;
+}
+
+/* Textarea */
+.app-control--textarea .app-control-input {
+  height: auto;
+  min-height: calc(var(--control-height-md) * 2.4);
+  padding: var(--space-2-5) var(--space-3);
+  resize: vertical;
+}
+
+/* Prevent iOS zoom on focus by keeping inputs at 16px on small screens. */
+@media (max-width: 520px) {
+  .app-control-input {
+    font-size: var(--font-size-lg);
+  }
+}

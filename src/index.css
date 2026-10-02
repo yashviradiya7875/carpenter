@@ -1,42 +1,6 @@
-:root {
-  --font-ui: 'Geist Variable';
-  --font-display: 'Geist Variable';
-  --font-mono: 'Geist Mono Variable';
-  --color-canvas: #0c0b12;
-  --color-canvas-raised: #100d19;
-  --color-surface: #14101a;
-  --color-surface-raised: #191321;
-  --color-line: rgba(191, 157, 239, 0.19);
-  --color-line-strong: rgba(175, 135, 223, 0.58);
-  --color-text: #f3f0f8;
-  --color-muted: #aaa4b7;
-  --color-accent: #9860df;
-  --color-accent-hover: #8146c7;
-  --color-accent-light: #c18cf5;
-  --color-highlight: #e6b49e;
-  --background-studio:
-    radial-gradient(ellipse at 65% 92%, rgba(89, 53, 139, 0.68) 0%, rgba(41, 27, 67, 0.38) 30%, transparent 60%),
-    linear-gradient(145deg, #0c0b12 0%, #100d19 55%, #171022 100%);
-  --radius-control: 8px;
-  --radius-panel: 18px;
-  --radius-dialog: 12px;
-  --radius-mark: 7px;
-  --radius-pill: 999px;
-  --radius-panel: 12px;
-  font-family: var(--font-ui);
-  color: var(--color-text);
-  background: var(--color-canvas);
-  color-scheme: dark;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-weight: 400;
-}
+@import './shared/ui/styles/index.css';
 
-* {
-  box-sizing: border-box;
-}
+/* App shell — tokens and document defaults live in shared/ui/styles. */
 
 html {
   min-width: 320px;
@@ -47,17 +11,7 @@ html {
 body {
   min-width: 320px;
   min-height: 100svh;
-  margin: 0;
   background: var(--color-canvas);
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  -webkit-tap-highlight-color: transparent;
 }
 
 #root {

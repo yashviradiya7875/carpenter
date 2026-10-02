@@ -1,0 +1,402 @@
+/*
+ * Design tokens
+ *
+ * Two layers:
+ *   1. Primitives (--palette-*) — raw values. Never use them in components.
+ *   2. Semantic tokens — what components and features consume.
+ *
+ * Themes: `:root` holds the dark theme (the default); `:root[data-theme='light']`
+ * overrides the semantic layer at the end of this file. Components and features use
+ * semantic tokens only, so every screen follows the active theme automatically.
+ * ThemeProvider (theme/) sets `data-theme` on <html>.
+ *
+ * Names that existed before the design system (--color-canvas, --color-line,
+ * --radius-control, --font-ui, --background-studio, …) are part of this contract
+ * and are used by feature stylesheets. Keep them.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------------------------------------------------------------- primitives */
+  --palette-ink-950: #0c0b12;
+  --palette-ink-900: #100d19;
+  --palette-ink-850: #110e17;
+  --palette-ink-800: #14101a;
+  --palette-ink-750: #17131f;
+  --palette-ink-700: #191321;
+  --palette-ink-500: #45414c;
+
+  --palette-mist-50: #f3f0f8;
+  --palette-mist-200: #d6cedf;
+  --palette-mist-400: #aaa4b7;
+  --palette-mist-500: #8f879a;
+
+  --palette-violet-300: #c18cf5;
+  --palette-violet-400: #9854d7;
+  --palette-violet-500: #9860df;
+  --palette-violet-600: #8146c7;
+
+  --palette-copper-300: #e6b49e;
+
+  --palette-red-200: #ffd6d8;
+  --palette-red-300: #ffc2bb;
+  --palette-red-400: #e0757c;
+
+  --palette-green-300: #a7dfbf;
+  --palette-green-400: #68c195;
+
+  --palette-amber-300: #f3d29b;
+  --palette-amber-400: #e6b45a;
+
+  /* -------------------------------------------------------------------- colors */
+  /* Surfaces, from the page backdrop up to floating panels */
+  --color-canvas: var(--palette-ink-950);
+  --color-canvas-raised: var(--palette-ink-900);
+  --color-surface: var(--palette-ink-800);
+  --color-surface-raised: var(--palette-ink-700);
+  --color-surface-overlay: var(--palette-ink-750);
+  --color-surface-inset: var(--palette-ink-850);
+  --color-surface-hover: rgba(255, 255, 255, 0.07);
+  --color-surface-subtle: rgba(255, 255, 255, 0.035);
+  --color-backdrop: rgba(4, 3, 7, 0.74);
+  --color-surface-bar: rgba(10, 9, 15, 0.88); /* translucent app bars over content */
+  --color-panel: rgba(15, 12, 21, 0.76);        /* content panels over the studio background */
+  --color-panel-strong: rgba(14, 11, 20, 0.92); /* panels floating over media or content */
+  --color-media-bg: #09080c;                    /* letterbox behind images */
+
+  /* Neutral tints layered on any surface (hover, wells, rows) */
+  --color-overlay-1: rgba(255, 255, 255, 0.025);
+  --color-overlay-2: rgba(255, 255, 255, 0.04);
+  --color-overlay-3: rgba(255, 255, 255, 0.07);
+  --color-overlay-4: rgba(255, 255, 255, 0.1);
+
+  /* Lines */
+  --color-line: rgba(191, 157, 239, 0.19);
+  --color-line-strong: rgba(175, 135, 223, 0.58);
+  --color-line-subtle: rgba(255, 255, 255, 0.1);
+  --color-line-faint: rgba(191, 157, 239, 0.11); /* dividers between rows and sections */
+
+  /* Text */
+  --color-text: var(--palette-mist-50);
+  --color-text-secondary: var(--palette-mist-200);
+  --color-muted: var(--palette-mist-400);
+  --color-text-placeholder: var(--palette-mist-500);
+  --color-text-on-accent: #fff;
+
+  /* Brand */
+  --color-accent: var(--palette-violet-500);
+  --color-accent-hover: var(--palette-violet-600);
+  --color-accent-light: var(--palette-violet-300);
+  --color-accent-subtle: rgba(152, 96, 223, 0.13);      /* selected backgrounds */
+  --color-accent-faint: rgba(152, 96, 223, 0.07);       /* hover on selectable items */
+  --color-accent-line: rgba(193, 140, 245, 0.38);       /* selected / hovered borders */
+  --color-accent-line-strong: rgba(193, 140, 245, 0.7); /* emphasized borders (dropzone, selected card) */
+  --color-accent-muted: #a98bcf;                        /* quiet accent icons and labels */
+  --color-accent-press: rgba(152, 96, 223, 0.2);
+  --color-highlight: var(--palette-copper-300);
+  --color-highlight-subtle: rgba(230, 180, 158, 0.1);
+  --gradient-accent: linear-gradient(110deg, var(--palette-violet-600), var(--palette-violet-400));
+
+  /* Status: text / background / line per tone */
+  --color-danger: var(--palette-red-400);
+  --color-danger-text: var(--palette-red-300);
+  --color-danger-text-strong: var(--palette-red-200);
+  --color-danger-bg: rgba(129, 44, 48, 0.16);
+  --color-danger-bg-strong: rgba(146, 54, 63, 0.2);
+  --color-danger-bg-hover: rgba(146, 54, 63, 0.34);
+  --color-danger-line: rgba(224, 117, 124, 0.35);
+
+  --color-success: var(--palette-green-400);
+  --color-success-text: var(--palette-green-300);
+  --color-success-bg: rgba(54, 130, 91, 0.12);
+  --color-success-line: rgba(104, 193, 149, 0.25);
+
+  --color-warning: var(--palette-amber-400);
+  --color-warning-text: var(--palette-amber-300);
+  --color-warning-bg: rgba(150, 110, 30, 0.16);
+  --color-warning-line: rgba(230, 180, 90, 0.3);
+
+  --color-info: var(--palette-violet-300);
+  --color-info-text: #dcc6f8;
+  --color-info-bg: rgba(152, 96, 223, 0.12);
+  --color-info-line: rgba(193, 140, 245, 0.3);
+
+  /* Form controls */
+  --color-field-bg: rgba(255, 255, 255, 0.06);
+  --color-field-bg-focus: rgba(255, 255, 255, 0.09);
+  --color-field-line: rgba(191, 157, 239, 0.55); /* ≥3:1 against canvas and dialogs */
+  --color-field-line-hover: rgba(205, 165, 245, 0.8);
+
+  /* Backgrounds and decoration */
+  --background-studio:
+    radial-gradient(ellipse at 65% 92%, rgba(89, 53, 139, 0.68) 0%, rgba(41, 27, 67, 0.38) 30%, transparent 60%),
+    linear-gradient(145deg, #0c0b12 0%, #100d19 55%, #171022 100%);
+  --background-composer: linear-gradient(145deg, rgba(14, 10, 20, 0.97), rgba(18, 12, 25, 0.95));
+  --pattern-line: rgba(223, 205, 244, 0.018);   /* fine background grid lines */
+  --pattern-sheen: rgba(176, 138, 213, 0.065);  /* soft diagonal sheen */
+  --gradient-headline: linear-gradient(100deg, #9986b1 8%, #f0eaf7 47%, #857493 94%);
+
+  /* Animated grid background (AnimatedGridPattern): barely-there lines, faint lavender cells */
+  --effect-grid-line: rgba(214, 196, 240, 0.05);
+  --effect-grid-square: var(--palette-violet-300);
+  --effect-grid-opacity: 0.07;
+
+  /* Avatar */
+  --avatar-bg: linear-gradient(145deg, #a3a9b1, #655d72);
+  --avatar-text: #17131c;
+  --avatar-line: rgba(255, 255, 255, 0.22);
+
+  /* ---------------------------------------------------------------- typography */
+  --font-ui: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  --font-size-2xs: 10px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  --font-size-4xl: 40px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-strong: 650;
+  --font-weight-bold: 700;
+
+  --line-height-none: 1;
+  --line-height-tight: 1.15;
+  --line-height-snug: 1.3;
+  --line-height-normal: 1.5;
+
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.08em;
+
+  /* ------------------------------------------------------------------- spacing */
+  /* 4px grid, with half steps where dense UI needs them */
+  --space-0: 0;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* -------------------------------------------------------------------- radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Role aliases (existing names) */
+  --radius-control: var(--radius-md);
+  --radius-panel: var(--radius-lg);
+  --radius-dialog: var(--radius-lg);
+  --radius-mark: 7px;
+  --radius-pill: var(--radius-full);
+
+  /* ------------------------------------------------------------------- borders */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+  --border-subtle: var(--border-width) solid var(--color-line);
+  --border-strong: var(--border-width) solid var(--color-line-strong);
+
+  /* ------------------------------------------------------------------- shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 24px 84px rgba(0, 0, 0, 0.52);
+  --shadow-accent: 0 4px 14px rgba(122, 66, 187, 0.22);
+  --shadow-glow: 0 0 42px rgba(105, 68, 148, 0.12);
+  --shadow-button-primary: 0 3px 12px rgba(122, 66, 187, 0.2);
+  --shadow-composer: 0 14px 48px rgba(0, 0, 0, 0.24), 0 0 26px rgba(104, 67, 158, 0.08);
+  --shadow-card-hover: 0 8px 20px rgba(125, 88, 170, 0.18);
+
+  /* ----------------------------------------------------------------- elevation */
+  /* Stacking layers. Dialogs render in a portal, so later dialogs stack on top. */
+  --z-base: 0;
+  --z-raised: 1;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-popover: 45; /* menus opened from inside dialogs must sit above them */
+  --z-toast: 50;
+
+  /* --------------------------------------------------------- component heights */
+  --control-height-xs: 28px;
+  --control-height-sm: 32px;
+  --control-height-md: 38px;
+  --control-height-lg: 44px;
+  --control-height-touch: 44px;
+
+  /* ---------------------------------------------------------- motion & timing */
+  /* instant: press feedback · fast: hover, menus, toggles · base: content, dialogs · slow: sheets, views */
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --duration-slower: 420ms;
+  --duration-spin: 700ms;
+  --duration-loading-delay: 150ms; /* fast responses never flash a spinner */
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-linear: linear;
+
+  --transition-colors:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+
+  /* --------------------------------------------------------------- breakpoints */
+  /*
+   * CSS cannot read custom properties inside @media, so these are the reference
+   * values (mirrored in tokens.ts for JS). Write media queries with the literal:
+   *   @media (max-width: 760px)  →  md and below
+   */
+  --breakpoint-xs: 380px;
+  --breakpoint-sm: 520px;
+  --breakpoint-md: 760px;
+  --breakpoint-lg: 1000px;
+  --breakpoint-xl: 1280px;
+
+  /* -------------------------------------------------------------------- focus */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: var(--color-accent-light);
+  --focus-ring: var(--focus-ring-width) solid var(--focus-ring-color);
+  --focus-glow: 0 0 0 3px rgba(152, 96, 223, 0.18);
+}
+
+/*
+ * Light theme. Neutral, white-first surfaces with ink text; purple stays a soft accent
+ * for primary actions, selection and focus. Every pair meets WCAG AA (text 4.5:1,
+ * control boundaries and focus 3:1).
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --color-canvas: #f6f6f8;
+  --color-canvas-raised: #fafafb;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-overlay: #ffffff;
+  --color-surface-inset: #f3f2f6;
+  --color-surface-hover: rgba(24, 18, 38, 0.05);
+  --color-surface-subtle: rgba(24, 18, 38, 0.03);
+  --color-backdrop: rgba(28, 22, 40, 0.32);
+  --color-surface-bar: rgba(255, 255, 255, 0.86);
+  --color-panel: #ffffff;
+  --color-panel-strong: rgba(255, 255, 255, 0.95);
+  --color-media-bg: #f1f0f4;
+
+  --color-overlay-1: rgba(24, 18, 38, 0.025);
+  --color-overlay-2: rgba(24, 18, 38, 0.04);
+  --color-overlay-3: rgba(24, 18, 38, 0.06);
+  --color-overlay-4: rgba(24, 18, 38, 0.08);
+
+  /* Lines */
+  --color-line: rgba(24, 18, 38, 0.1);
+  --color-line-strong: rgba(24, 18, 38, 0.16);
+  --color-line-subtle: rgba(24, 18, 38, 0.08);
+  --color-line-faint: rgba(24, 18, 38, 0.06);
+
+  /* Text */
+  --color-text: #1d1a24;
+  --color-text-secondary: #3f3a4a;
+  --color-muted: #5f5a6b;
+  --color-text-placeholder: #6f6a7a;
+  --color-text-on-accent: #ffffff;
+
+  /* Accent: soft lavender tints, one solid tone for primary actions */
+  --color-accent: #7352bd;
+  --color-accent-hover: #6343ab;
+  --color-accent-light: #6544ad; /* accent text, icons and focus on light surfaces */
+  --color-accent-subtle: #f2edfb;
+  --color-accent-faint: #f8f5fd;
+  --color-accent-line: #d9cdf2;
+  --color-accent-line-strong: #b9a5e5;
+  --color-accent-muted: #6f5b9a;
+  --color-accent-press: #e9e1f8;
+  --color-highlight: #b8693a;
+  --color-highlight-subtle: rgba(184, 105, 58, 0.1);
+  --gradient-accent: linear-gradient(110deg, #7352bd, #7352bd); /* solid: no heavy gradients */
+
+  /* Status */
+  --color-danger: #c2414b;
+  --color-danger-text: #a3303a;
+  --color-danger-text-strong: #8c2430;
+  --color-danger-bg: #fdf0f1;
+  --color-danger-bg-strong: #fbe5e8;
+  --color-danger-bg-hover: #f7d5da;
+  --color-danger-line: #efc2c7;
+
+  --color-success: #2e9a62;
+  --color-success-text: #1d7448;
+  --color-success-bg: #edf7f1;
+  --color-success-line: #bfe2ce;
+
+  --color-warning: #b57a12;
+  --color-warning-text: #845500;
+  --color-warning-bg: #fdf5e4;
+  --color-warning-line: #efdaa9;
+
+  --color-info: #7352bd;
+  --color-info-text: #5a3e9e;
+  --color-info-bg: #f4f0fc;
+  --color-info-line: #ddd1f3;
+
+  /* Form controls */
+  --color-field-bg: #ffffff;
+  --color-field-bg-focus: #ffffff;
+  --color-field-line: rgba(24, 18, 38, 0.5); /* >=3:1 against white and canvas */
+  --color-field-line-hover: rgba(24, 18, 38, 0.66);
+
+  /* Backgrounds and decoration */
+  --background-studio:
+    radial-gradient(ellipse at 70% 100%, rgba(150, 120, 210, 0.08) 0%, transparent 55%),
+    linear-gradient(180deg, #fbfbfc 0%, #f4f3f7 100%);
+  --background-composer: #ffffff;
+  --pattern-line: rgba(40, 30, 70, 0.035);
+  --pattern-sheen: rgba(150, 120, 210, 0.06);
+  --gradient-headline: linear-gradient(100deg, #1d1a24 10%, #5b4d73 50%, #1d1a24 90%);
+
+  --effect-grid-line: rgba(40, 30, 70, 0.06);
+  --effect-grid-square: #9b84d6;
+  --effect-grid-opacity: 0.08;
+
+  --avatar-bg: linear-gradient(145deg, #ebe8f0, #d3cddc);
+  --avatar-text: #2b2433;
+  --avatar-line: rgba(24, 18, 38, 0.12);
+
+  /* Shadows: minimal and neutral */
+  --shadow-sm: 0 1px 2px rgba(20, 16, 30, 0.06);
+  --shadow-md: 0 8px 24px rgba(20, 16, 30, 0.1);
+  --shadow-lg: 0 24px 64px rgba(20, 16, 30, 0.16);
+  --shadow-accent: 0 4px 12px rgba(115, 82, 189, 0.16);
+  --shadow-glow: none;
+  --shadow-button-primary: 0 1px 2px rgba(20, 16, 30, 0.12);
+  --shadow-composer: 0 1px 2px rgba(20, 16, 30, 0.04), 0 12px 32px rgba(20, 16, 30, 0.06);
+  --shadow-card-hover: 0 6px 16px rgba(20, 16, 30, 0.08);
+
+  /* Focus */
+  --focus-glow: 0 0 0 3px rgba(115, 82, 189, 0.18);
+}

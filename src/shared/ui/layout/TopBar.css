@@ -1,0 +1,42 @@
+.app-topbar {
+  --app-topbar-height: 52px;
+  min-height: var(--app-topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: var(--border-subtle);
+  background: var(--color-surface-bar);
+  padding: 0 clamp(var(--space-4), 3vw, 38px);
+  backdrop-filter: blur(12px);
+}
+
+.app-topbar--sticky {
+  position: sticky;
+  z-index: var(--z-sticky);
+  top: 0;
+}
+
+.app-topbar-start,
+.app-topbar-end {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-topbar-end {
+  flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .app-topbar {
+    --app-topbar-height: 48px;
+    gap: var(--space-2);
+    padding-inline: var(--space-3);
+  }
+
+  .app-topbar-end {
+    gap: var(--space-1);
+  }
+}

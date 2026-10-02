@@ -1,0 +1,334 @@
+/*
+ * Button
+ *
+ * Sizing comes from four custom properties set per size; variants only change
+ * colors. The button never sets `transform`, so consumers can position it freely.
+ */
+
+:where(.app-button) {
+  position: relative;
+}
+
+.app-button {
+  --app-button-height: var(--control-height-md);
+  --app-button-padding: var(--space-3);
+  --app-button-font-size: var(--font-size-sm);
+  --app-button-icon-size: 15px;
+
+  min-width: 0;
+  min-height: var(--app-button-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-control);
+  padding: 0 var(--app-button-padding);
+  color: var(--color-text);
+  font: var(--font-weight-semibold) var(--app-button-font-size) / var(--line-height-none) var(--font-ui);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    var(--transition-colors),
+    filter var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    scale var(--duration-instant) var(--ease-standard);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Press feedback. `scale` is independent of `transform`, so it composes with any
+ * transform a consumer uses for positioning.
+ */
+.app-button:not(.app-button--link):enabled:not([aria-busy='true']):active,
+a.app-button:not(.app-button--link):active {
+  scale: 0.97;
+}
+
+.app-button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* ----------------------------------------------------------------- content */
+
+.app-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-button-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.app-button-icon > svg,
+.app-button .app-icon {
+  width: var(--app-button-icon-size);
+  height: var(--app-button-icon-size);
+}
+
+.app-button-spinner {
+  width: calc(var(--app-button-icon-size) - 1px);
+  height: calc(var(--app-button-icon-size) - 1px);
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation:
+    app-spin var(--duration-spin) linear infinite,
+    app-fade-in var(--duration-fast) var(--ease-standard) backwards;
+}
+
+/* -------------------------------------------------------------------- sizes */
+
+.app-button--xs {
+  --app-button-height: var(--control-height-xs);
+  --app-button-padding: var(--space-2-5);
+  --app-button-font-size: var(--font-size-xs);
+  --app-button-icon-size: 13px;
+  gap: var(--space-1-5);
+}
+
+.app-button--sm {
+  --app-button-height: var(--control-height-sm);
+  --app-button-padding: var(--space-3);
+  --app-button-font-size: var(--font-size-xs);
+  --app-button-icon-size: 14px;
+  gap: var(--space-1-5);
+}
+
+.app-button--md {
+  --app-button-height: var(--control-height-md);
+  --app-button-padding: var(--space-3);
+  --app-button-font-size: var(--font-size-sm);
+  --app-button-icon-size: 15px;
+}
+
+.app-button--lg {
+  --app-button-height: var(--control-height-lg);
+  --app-button-padding: var(--space-4);
+  --app-button-font-size: var(--font-size-md);
+  --app-button-icon-size: 17px;
+}
+
+/* ---------------------------------------------------------------- modifiers */
+
+.app-button--icon-only {
+  width: var(--app-button-height);
+  min-width: var(--app-button-height);
+  padding: 0;
+}
+
+.app-button--pill {
+  border-radius: var(--radius-full);
+}
+
+.app-button--full {
+  width: 100%;
+}
+
+/* ----------------------------------------------------------------- variants */
+/* :enabled + not busy = interactive; hover/active never apply to disabled or loading buttons. */
+
+.app-button--primary {
+  background: var(--gradient-accent);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-button-primary);
+}
+
+.app-button--primary:enabled:not([aria-busy='true']):hover {
+  filter: brightness(1.08);
+}
+
+.app-button--primary:enabled:not([aria-busy='true']):active {
+  filter: brightness(0.94);
+}
+
+.app-button--secondary {
+  border-color: var(--color-line-subtle);
+  background: var(--color-overlay-3);
+}
+
+.app-button--secondary:enabled:not([aria-busy='true']):hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-subtle);
+}
+
+.app-button--secondary:enabled:not([aria-busy='true']):active {
+  background: var(--color-accent-press);
+}
+
+.app-button--outline {
+  border-color: var(--color-line-strong);
+  background: transparent;
+}
+
+.app-button--outline:enabled:not([aria-busy='true']):hover {
+  background: var(--color-accent-subtle);
+}
+
+.app-button--outline:enabled:not([aria-busy='true']):active {
+  background: var(--color-accent-press);
+}
+
+.app-button--ghost {
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.app-button--ghost:enabled:not([aria-busy='true']):hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.app-button--ghost:enabled:not([aria-busy='true']):active {
+  background: var(--color-overlay-4);
+}
+
+.app-button--destructive {
+  border-color: var(--color-danger-line);
+  background: var(--color-danger-bg-strong);
+  color: var(--color-danger-text-strong);
+}
+
+.app-button--destructive:enabled:not([aria-busy='true']):hover {
+  background: var(--color-danger-bg-hover);
+}
+
+.app-button--destructive:enabled:not([aria-busy='true']):active {
+  background: var(--color-danger-bg-hover);
+  filter: brightness(0.94);
+}
+
+.app-button--link {
+  --app-button-padding: var(--space-1);
+  background: transparent;
+  color: var(--color-accent-light);
+}
+
+.app-button--link:enabled:not([aria-busy='true']):hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* "On" state for toggle (aria-pressed) and disclosure (aria-expanded) buttons. */
+.app-button--secondary:is([aria-pressed='true'], [aria-expanded='true']),
+.app-button--outline:is([aria-pressed='true'], [aria-expanded='true']) {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+}
+
+.app-button--ghost:is([aria-pressed='true'], [aria-expanded='true']) {
+  border-color: var(--color-line);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* Anchors styled with buttonClasses() have no :enabled state. */
+a.app-button--secondary:hover { border-color: var(--color-accent-line); background: var(--color-accent-subtle); }
+a.app-button--outline:hover { background: var(--color-accent-subtle); }
+a.app-button--ghost:hover { background: var(--color-surface-hover); color: var(--color-text); }
+a.app-button--link:hover { color: var(--color-text); text-decoration: underline; text-underline-offset: 3px; }
+a.app-button--primary:hover { filter: brightness(1.08); }
+
+/* ------------------------------------------------------- disabled & loading */
+
+.app-button:disabled,
+.app-button[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.app-button[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ tooltip */
+
+.app-button-tooltip {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  left: 50%;
+  max-width: 240px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  padding: var(--space-1-5) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-snug);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard), visibility var(--duration-fast), translate var(--duration-fast) var(--ease-standard);
+}
+
+.app-button-tooltip--top {
+  bottom: calc(100% + var(--space-2));
+  translate: -50% 4px;
+}
+
+.app-button-tooltip--bottom {
+  top: calc(100% + var(--space-2));
+  translate: -50% -4px;
+}
+
+/* Show after a short delay on hover; immediately on keyboard focus. */
+.app-button:hover > .app-button-tooltip,
+.app-button:focus-visible > .app-button-tooltip {
+  opacity: 1;
+  visibility: visible;
+  translate: -50% 0;
+}
+
+.app-button:hover > .app-button-tooltip {
+  transition-delay: 400ms;
+}
+
+.app-button[data-tooltip-dismissed] > .app-button-tooltip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Touch screens have no hover: only keyboard focus shows the tooltip. */
+@media (hover: none) {
+  .app-button:hover:not(:focus-visible) > .app-button-tooltip {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* -------------------------------------------------------------- touch target */
+/* Expands the hit area to 44px on touch screens without changing the visual size. */
+@media (pointer: coarse) {
+  .app-button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--control-height-touch));
+    height: max(100%, var(--control-height-touch));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* High Contrast mode drops backgrounds; keep "on" states visible. */
+@media (forced-colors: active) {
+  .app-button:is([aria-pressed='true'], [aria-expanded='true']) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
