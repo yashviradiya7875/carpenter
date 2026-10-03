@@ -35,6 +35,8 @@ export {
   type MenuTriggerProps,
 } from './components/Menu'
 
+export { Tabs, type TabItem, type TabsProps } from './components/Tabs'
+
 // Layout
 export { TopBar, type TopBarProps } from './layout/TopBar'
 

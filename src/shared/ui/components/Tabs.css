@@ -1,0 +1,69 @@
+.app-tabs {
+  min-width: 0;
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  border-bottom: var(--border-subtle);
+  scrollbar-width: none;
+}
+
+.app-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.app-tab {
+  position: relative;
+  min-height: var(--control-height-md);
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1-5);
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-0-5);
+  color: var(--color-muted);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.app-tab:hover {
+  color: var(--color-text);
+}
+
+/* Selected: text color plus an underline, so it never relies on color alone. */
+.app-tab[aria-selected='true'] {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app-tab[aria-selected='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-light);
+  content: '';
+}
+
+.app-tab:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.app-tab-count {
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+@media (pointer: coarse) {
+  .app-tab {
+    min-height: var(--control-height-touch);
+  }
+}

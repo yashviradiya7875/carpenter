@@ -1,28 +1,33 @@
-import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { ApiError } from '../../shared/api/client'
+import { creditCostFor } from '../../shared/auth/pricing'
 import type { AuthAccount } from '../../shared/auth/types'
 import { Mark } from '../../shared/components/Mark'
+import { RoomSelect } from '../../shared/components/RoomSelect'
+import type { RoomSelection } from '../../shared/components/roomImage'
 import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
 import { LibraryDialog } from './components/LibraryDialog'
 import { MaterialPill } from './components/MaterialPill'
 import { OverviewStat } from './components/OverviewStat'
-import { UploadOptionsDialog } from './components/UploadOptionsDialog'
 import {
   createLaminateCollection,
   deleteCollection,
   deleteProduct,
   generateCarpenterRender,
+  getLastRenderCost,
   getProduct,
   getShareStats,
   getUserCredits,
+  listCarpenterScenes,
   listCollectionProducts,
   listLaminateCollections,
   uploadLaminateProducts,
   type GenerationResult,
+  type RoomLibrary,
   type ShareStats,
 } from './dashboardService'
-import { UPLOAD_TYPES, type Collection, type MaterialChoice, type MaterialSlot, type Product, type UploadType } from './dashboardTypes'
-import { fileToMaterial, MAX_MULTI_PRODUCT_FILES, MAX_RENDER_MATERIAL_BYTES, productToMaterial } from './materials'
+import type { Collection, MaterialChoice, MaterialSlot, Product, UploadType } from './dashboardTypes'
+import { classifyUpload, fileToMaterial, productToMaterial } from './materials'
 import './DashboardPage.css'
 
 type DashboardPageProps = {
@@ -30,6 +35,8 @@ type DashboardPageProps = {
   /** Hidden (but kept mounted) while another view is open, so work in progress survives. */
   hidden?: boolean
   onOpenFiles: () => void
+  /** Current balance (owned by the app shell), used to check a render is affordable. */
+  credits?: number
   /** Reports the balance after a render spends credits; the global header shows it. */
   onCreditsChange: (credits: number) => void
 }
@@ -54,13 +61,18 @@ function messageFor(error: unknown): string {
   return 'Something went wrong. Please try again.'
 }
 
-function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }: DashboardPageProps) {
+function creditsLabel(amount: number): string {
+  return `${amount} ${amount === 1 ? 'credit' : 'credits'}`
+}
+
+function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCreditsChange }: DashboardPageProps) {
   const [primaryMaterial, setPrimaryMaterial] = useState<MaterialChoice | null>(null)
   const [accentMaterial, setAccentMaterial] = useState<MaterialChoice | null>(null)
   const [isLibraryOpen, setIsLibraryOpen] = useState(false)
-  const [isUploadOptionsOpen, setIsUploadOptionsOpen] = useState(false)
-  const [selectedUploadType, setSelectedUploadType] = useState<UploadType | null>(null)
+  // Several images (one render each) or videos; a single image becomes the primary material instead.
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [pendingKind, setPendingKind] = useState<Exclude<UploadType, 'single'>>('multi')
+  const [isDropActive, setIsDropActive] = useState(false)
   const [librarySlot, setLibrarySlot] = useState<MaterialSlot>('primary')
   const [collections, setCollections] = useState<Collection[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -76,14 +88,28 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
   const [render, setRender] = useState<GenerationResult | null>(null)
+  const [renderName, setRenderName] = useState('')
+  const [completedRenders, setCompletedRenders] = useState(0)
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
+  // What the server most recently charged this account for a render, when known. It corrects the
+  // tier price below for accounts whose real tier differs (dealers inherit their manufacturer's).
+  const [chargedCost, setChargedCost] = useState<number | null>(null)
+  // Room step: replaces the upload step inside the composer after Generate. Both steps stay
+  // mounted, so the upload and the chosen room survive moving back and forth.
+  const [isRoomStepOpen, setIsRoomStepOpen] = useState(false)
+  const [roomLibrary, setRoomLibrary] = useState<RoomLibrary | null>(null)
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false)
+  const [roomsError, setRoomsError] = useState('')
+  const uploadStep = useRef<HTMLDivElement>(null)
+  const roomStep = useRef<HTMLElement>(null)
+  const generateButton = useRef<HTMLButtonElement>(null)
+  const roomStepWasOpen = useRef(false)
   const [shareStats, setShareStats] = useState<ShareStats | null>(null)
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
   const overviewTrigger = useRef<HTMLButtonElement>(null)
   const overviewCollapse = useRef<HTMLButtonElement>(null)
   const overviewWasOpen = useRef(false)
-  const singleImageInput = useRef<HTMLInputElement>(null)
-  const multipleImagesInput = useRef<HTMLInputElement>(null)
-  const videoInput = useRef<HTMLInputElement>(null)
+  const uploadInput = useRef<HTMLInputElement>(null)
   const libraryImageInput = useRef<HTMLInputElement>(null)
   const libraryFolderInput = useRef<HTMLInputElement>(null)
 
@@ -103,6 +129,17 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
       .catch(() => setShareStats(null))
     return () => controller.abort()
   }, [account.username])
+
+  useEffect(() => {
+    // An organization member renders at the organization's tier, which their own account record
+    // may not show; their last real charge is the better price. Everyone else uses their own tier.
+    if (account.role !== 'org_user') return
+    const controller = new AbortController()
+    getLastRenderCost(account.username, { signal: controller.signal })
+      .then((cost) => { if (cost !== null) setChargedCost(cost) })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [account.role, account.username])
 
   useEffect(() => {
     const folderInput = libraryFolderInput.current
@@ -134,83 +171,64 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isOverviewOpen])
 
-  const openUploadOptions = () => setIsUploadOptionsOpen(true)
+  // Changing step swaps what the composer shows; move focus along with it.
+  useEffect(() => {
+    if (isRoomStepOpen) {
+      roomStepWasOpen.current = true
+      roomStep.current?.focus()
+    } else if (roomStepWasOpen.current) {
+      roomStepWasOpen.current = false
+      if (generateButton.current && !generateButton.current.disabled) generateButton.current.focus()
+      else uploadStep.current?.focus()
+    }
+  }, [isRoomStepOpen])
 
-  const closeUploadOptions = () => {
-    setIsUploadOptionsOpen(false)
-  }
+  // Direct upload: the files decide the generation type, there is no type picker.
+  const handleUpload = async (files: File[]) => {
+    if (!files.length) return
+    const selection = classifyUpload(files)
+    setGenerationError('')
+    if (!selection.ok) {
+      setGenerationError(selection.message)
+      return
+    }
 
-  const selectUploadType = (type: UploadType) => {
-    setSelectedUploadType(type)
+    setRender(null)
+    setCompletedRenders(0)
+    if (selection.kind === 'single') {
+      try {
+        setPrimaryMaterial(await fileToMaterial(selection.files[0]))
+        setAccentMaterial(null)
+        setPendingFiles([])
+      } catch (error) {
+        setGenerationError(error instanceof Error ? error.message : messageFor(error))
+      }
+      return
+    }
+    setPendingFiles(selection.files)
+    setPendingKind(selection.kind)
     setPrimaryMaterial(null)
     setAccentMaterial(null)
-    setPendingFiles([])
-    setGenerationError('')
-    setRender(null)
-    closeUploadOptions()
-
-    if (type === 'single') singleImageInput.current?.click()
-    if (type === 'multi') multipleImagesInput.current?.click()
-    if (type === 'reel') videoInput.current?.click()
   }
 
-  const handleSingleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0]
-    event.currentTarget.value = ''
-    setGenerationError('')
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setGenerationError('Single product uploads must be an image.')
-      return
-    }
-    if (file.size > MAX_RENDER_MATERIAL_BYTES) {
-      setGenerationError('Keep the image size under 20 MB.')
-      return
-    }
-
-    try {
-      setPrimaryMaterial(await fileToMaterial(file))
-      setAccentMaterial(null)
-      setPendingFiles([])
-    } catch (error) {
-      setGenerationError(messageFor(error))
-    }
-  }
-
-  const handleMultipleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleUploadSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ''
-    setGenerationError('')
-    if (!files.length) return
-    if (files.length > MAX_MULTI_PRODUCT_FILES) {
-      setGenerationError(`Choose no more than ${MAX_MULTI_PRODUCT_FILES} product images at a time.`)
-      return
-    }
-    const invalidFile = files.find((file) => !file.type.startsWith('image/'))
-    if (invalidFile) {
-      setGenerationError(`${invalidFile.name} is not an image. Multi product only accepts images.`)
-      return
-    }
-    setPendingFiles(files)
-    setPrimaryMaterial(null)
-    setAccentMaterial(null)
-    setRender(null)
+    void handleUpload(files)
   }
 
-  const handleVideoUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? [])
-    event.currentTarget.value = ''
-    setGenerationError('')
-    if (!files.length) return
-    const invalidFile = files.find((file) => !file.type.startsWith('video/'))
-    if (invalidFile) {
-      setGenerationError(`${invalidFile.name} is not a video. Reel / video only accepts video files.`)
-      return
-    }
-    setPendingFiles(files)
-    setPrimaryMaterial(null)
-    setAccentMaterial(null)
-    setRender(null)
+  const handleDropzoneDragOver = (event: DragEvent<HTMLButtonElement>) => {
+    if (!canUpload || !event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setIsDropActive(true)
+  }
+
+  const handleDropzoneDrop = (event: DragEvent<HTMLButtonElement>) => {
+    if (!canUpload || !event.dataTransfer.files.length) return
+    event.preventDefault()
+    setIsDropActive(false)
+    void handleUpload(Array.from(event.dataTransfer.files))
   }
 
   const addLibraryProducts = async (files: File[], collectionId: string | null) => {
@@ -414,25 +432,88 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
     }
   }
 
-  const generateRender = async () => {
-    if (selectedUploadType === 'multi' || selectedUploadType === 'reel') {
-      setGenerationError('The selected upload is ready. Its generation workflow will be connected next.')
-      return
+  // What will be generated, derived from the current selection.
+  const uploadKind: UploadType | null = pendingFiles.length ? pendingKind : primaryMaterial ? 'single' : null
+  const renderCount = uploadKind === 'multi' ? pendingFiles.length : uploadKind === 'single' ? 1 : 0
+  // Credits per render: the account's tier price, known as soon as something is selected.
+  const generationCost = chargedCost ?? creditCostFor(account.resolution)
+  const totalCost = renderCount > 0 ? generationCost * renderCount : null
+  const hasInsufficientCredits = totalCost !== null && typeof credits === 'number' && totalCost > credits
+  const canGenerate = renderCount > 0 && !hasInsufficientCredits
+
+  const refreshCredits = async () => {
+    const remaining = await getUserCredits(account.username).catch(() => null)
+    if (typeof remaining === 'number') onCreditsChange(remaining)
+  }
+
+  const loadRooms = async () => {
+    setIsLoadingRooms(true)
+    setRoomsError('')
+    try {
+      setRoomLibrary(await listCarpenterScenes(account.username))
+    } catch (error) {
+      setRoomsError(messageFor(error))
+    } finally {
+      setIsLoadingRooms(false)
     }
-    if (!primaryMaterial) {
-      setGenerationError('Choose or upload a primary laminate to continue.')
-      return
-    }
+  }
+
+  // Generate → choose a room → confirm → render.
+  const openRoomStep = () => {
+    if (!canGenerate || isGenerating) return
+    setGenerationError('')
+    setIsRoomStepOpen(true)
+    if (!roomLibrary && !isLoadingRooms) void loadRooms()
+  }
+
+  const confirmRoom = (room: RoomSelection | null) => {
+    setIsRoomStepOpen(false)
+    void generateRender(room)
+  }
+
+  const generateRender = async (room: RoomSelection | null) => {
+    if (!canGenerate || isGenerating) return
     setIsGenerating(true)
     setGenerationError('')
+    setCompletedRenders(0)
+    let done = 0
+    const total = renderCount
     try {
-      setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial))
-      const remainingCredits = await getUserCredits(account.username).catch(() => null)
-      if (typeof remainingCredits === 'number') onCreditsChange(remainingCredits)
+      if (uploadKind === 'multi') {
+        // One render per image, in order. Finished images leave the queue, so a retry resumes.
+        setBatchProgress({ done: 0, total })
+        for (const file of [...pendingFiles]) {
+          const material = await fileToMaterial(file)
+          const result = await generateCarpenterRender(account.username, material, null, room)
+          done += 1
+          setRender(result)
+          setRenderName(material.name)
+          setCompletedRenders(done)
+          setBatchProgress({ done, total })
+          setPendingFiles((current) => current.filter((item) => item !== file))
+          await refreshCredits()
+        }
+      } else if (primaryMaterial) {
+        setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial, room))
+        setRenderName(primaryMaterial.name)
+        done = 1
+        setCompletedRenders(1)
+        await refreshCredits()
+      }
     } catch (error) {
-      setGenerationError(messageFor(error))
+      const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : messageFor(error)
+      setGenerationError(total > 1 ? `Stopped after ${done} of ${total} renders. ${message}` : message)
+      // The server refunds a failed render; show the real balance.
+      await refreshCredits()
     } finally {
       setIsGenerating(false)
+      setBatchProgress(null)
+      // A render just ran: keep the shown price in step with what the server actually charged.
+      if (done > 0) {
+        void getLastRenderCost(account.username)
+          .then((cost) => { if (cost !== null) setChargedCost(cost) })
+          .catch(() => undefined)
+      }
     }
   }
 
@@ -454,7 +535,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
 
   return (
     <main
-      className={`carpenter-dashboard app-enter-fade ${isOverviewOpen ? 'is-overview-open' : ''}`}
+      className={`carpenter-dashboard app-enter-fade ${isOverviewOpen ? 'is-overview-open' : ''} ${isRoomStepOpen ? 'is-room-step' : ''}`}
       hidden={hidden}
       onPointerMove={updateOverviewAtmosphere}
       onPointerLeave={resetOverviewAtmosphere}
@@ -468,29 +549,12 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
 
         <section className="workspace-composer" aria-label="Common workspace">
           <input
-            ref={singleImageInput}
+            ref={uploadInput}
             className="file-input-hidden"
             type="file"
-            accept="image/*"
-            onChange={handleSingleImageUpload}
-            tabIndex={-1}
-          />
-          <input
-            ref={multipleImagesInput}
-            className="file-input-hidden"
-            type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
-            onChange={handleMultipleImageUpload}
-            tabIndex={-1}
-          />
-          <input
-            ref={videoInput}
-            className="file-input-hidden"
-            type="file"
-            accept="video/*"
-            multiple
-            onChange={handleVideoUpload}
+            onChange={handleUploadSelection}
             tabIndex={-1}
           />
           <input
@@ -510,91 +574,135 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
             onChange={handleLibraryFolderUpload}
             tabIndex={-1}
           />
-          <button
-            className={`material-dropzone ${canUpload || canBrowseLibrary ? '' : 'is-restricted'}`}
-            type="button"
-            disabled={!canUpload && !canBrowseLibrary}
-            onClick={canUpload ? openUploadOptions : () => void openLibrary('primary')}
-          >
-            <span className="dropzone-icon"><Mark name={canUpload ? 'upload' : 'folder'} /></span>
-            <span className="dropzone-copy">
-              <strong>{canUpload
-                ? 'Upload custom artwork / texture'
-                : canBrowseLibrary ? 'Choose from your manufacturer library' : 'Uploads aren’t available for this account'}</strong>
-              <small>{canUpload
-                ? selectedUploadType
-                  ? `${UPLOAD_TYPES.find((option) => option.id === selectedUploadType)?.title} selected · click to change`
-                  : 'Choose single product, multi product, or reel / video'
-                : canBrowseLibrary ? 'Browse the laminate collections shared with you' : 'Contact your organization administrator for access.'}</small>
-            </span>
-          </button>
-
-          {(primaryMaterial || accentMaterial) ? (
-            <div className="selected-materials" aria-live="polite">
-              {primaryMaterial ? (
-                <MaterialPill label="Primary" material={primaryMaterial} onRemove={() => setPrimaryMaterial(null)} />
-              ) : null}
-              {accentMaterial ? (
-                <MaterialPill label="Accent" material={accentMaterial} onRemove={() => setAccentMaterial(null)} />
-              ) : null}
-            </div>
-          ) : null}
-
-          {pendingFiles.length ? (
-            <div className="pending-files-summary app-enter" role="status">
-              <span className="pending-files-copy">
-                <strong>{pendingFiles.length} {selectedUploadType === 'reel' ? 'video' : 'product image'}{pendingFiles.length === 1 ? '' : 's'} selected</strong>
-                <small>{pendingFiles.slice(0, 2).map((file) => file.name).join(', ')}{pendingFiles.length > 2 ? ` +${pendingFiles.length - 2} more` : ''}</small>
+          {/* Step 1: upload and configure. Hidden, not unmounted, while a room is being chosen. */}
+          <div ref={uploadStep} className="composer-step app-enter" hidden={isRoomStepOpen} tabIndex={-1}>
+            <button
+              className={`material-dropzone ${canUpload || canBrowseLibrary ? '' : 'is-restricted'} ${isDropActive ? 'is-drop-active' : ''}`}
+              type="button"
+              disabled={(!canUpload && !canBrowseLibrary) || isGenerating}
+              onClick={canUpload ? () => uploadInput.current?.click() : () => void openLibrary('primary')}
+              onDragOver={handleDropzoneDragOver}
+              onDragLeave={() => setIsDropActive(false)}
+              onDrop={handleDropzoneDrop}
+            >
+              <span className="dropzone-icon"><Mark name={canUpload ? 'upload' : 'folder'} /></span>
+              <span className="dropzone-copy">
+                <strong>{canUpload
+                  ? 'Upload custom artwork / texture'
+                  : canBrowseLibrary ? 'Choose from your manufacturer library' : 'Uploads aren’t available for this account'}</strong>
+                <small>{canUpload
+                  ? uploadKind === 'single' ? '1 image selected · click or drop to replace'
+                    : uploadKind === 'multi' ? `${pendingFiles.length} images selected · one render each · click or drop to replace`
+                      : uploadKind === 'reel' ? 'Video selected · click or drop to replace'
+                        : 'Click or drop here: one image, several images, or a video'
+                  : canBrowseLibrary ? 'Browse the laminate collections shared with you' : 'Contact your organization administrator for access.'}</small>
               </span>
-              <Button variant="link" size="xs" onClick={() => setPendingFiles([])}>Clear</Button>
-            </div>
-          ) : null}
+            </button>
 
-          <div className="composer-toolbar">
-            <div className="composer-shortcuts">
-              {canOpenFiles ? (
-                <Button variant="ghost" size="xs" shape="pill" icon="folder" onClick={onOpenFiles}>
-                  Files
+            {(primaryMaterial || accentMaterial) ? (
+              <div className="selected-materials" aria-live="polite">
+                {primaryMaterial ? (
+                  <MaterialPill label="Primary" material={primaryMaterial} onRemove={() => setPrimaryMaterial(null)} />
+                ) : null}
+                {accentMaterial ? (
+                  <MaterialPill label="Accent" material={accentMaterial} onRemove={() => setAccentMaterial(null)} />
+                ) : null}
+              </div>
+            ) : null}
+
+            {pendingFiles.length ? (
+              <div className="pending-files-summary app-enter" role="status">
+                <span className="pending-files-copy">
+                  <strong>{pendingFiles.length} {uploadKind === 'reel' ? 'video' : 'product image'}{pendingFiles.length === 1 ? '' : 's'} selected{uploadKind === 'multi' ? ' · one render each' : ''}</strong>
+                  <small>{pendingFiles.slice(0, 2).map((file) => file.name).join(', ')}{pendingFiles.length > 2 ? ` +${pendingFiles.length - 2} more` : ''}</small>
+                </span>
+                <Button variant="link" size="xs" disabled={isGenerating} onClick={() => setPendingFiles([])}>Clear</Button>
+              </div>
+            ) : null}
+
+            <div className="composer-toolbar">
+              <div className="composer-shortcuts">
+                {canOpenFiles ? (
+                  <Button variant="ghost" size="xs" shape="pill" icon="folder" onClick={onOpenFiles}>
+                    Files
+                  </Button>
+                ) : null}
+                <Button variant="ghost" size="xs" shape="pill" icon="qr" disabled title="QR tools will be added in the sharing workflow">
+                  QR Code
                 </Button>
-              ) : null}
-              <Button variant="ghost" size="xs" shape="pill" icon="qr" disabled title="QR tools will be added in the sharing workflow">
-                QR Code
-              </Button>
+              </div>
+              <div className="composer-actions">
+                {canBrowseLibrary ? (
+                  <Button size="xs" shape="pill" icon="image" onClick={() => void openLibrary('primary')}>
+                    Browse library
+                  </Button>
+                ) : null}
+                <Button
+                  ref={generateButton}
+                  variant="primary"
+                  size="xs"
+                  shape="pill"
+                  icon="spark"
+                  onClick={openRoomStep}
+                  disabled={!canGenerate}
+                  loading={isGenerating}
+                  loadingLabel={batchProgress ? `Generating ${Math.min(batchProgress.done + 1, batchProgress.total)} of ${batchProgress.total}…` : 'Generating…'}
+                  aria-describedby={canGenerate ? undefined : 'generate-requirement'}
+                >
+                  {totalCost !== null ? `Generate · ${creditsLabel(totalCost)}` : 'Generate'}
+                </Button>
+              </div>
             </div>
-            <div className="composer-actions">
-              {canBrowseLibrary ? (
-                <Button size="xs" shape="pill" icon="image" onClick={() => void openLibrary('primary')}>
-                  Browse library
+            {/* Why Generate is unavailable; also announced via aria-describedby. */}
+            {/* {isGenerating || canGenerate ? null : (
+              <p className="generate-requirement" id="generate-requirement">
+                {uploadKind === 'reel'
+                  ? 'Video generation isn’t available yet. Upload images to create renders.'
+                  : hasInsufficientCredits
+                    ? `Not enough credits: this needs ${creditsLabel(totalCost ?? 0)} and you have ${credits ?? 0}.${renderCount > 1 ? ' Remove some images to continue.' : ''}`
+                    : canUpload
+                      ? 'Upload an image or choose a laminate to generate.'
+                      : 'Choose a laminate to generate.'}
+              </p>
+            )} */}
+            {generationError ? <Alert tone="error" className="dashboard-message">{generationError}</Alert> : null}
+            {isGenerating ? (
+              <Alert tone="info" className="dashboard-message">
+                {batchProgress
+                  ? `Creating render ${Math.min(batchProgress.done + 1, batchProgress.total)} of ${batchProgress.total}. Each can take a few minutes.`
+                  : 'Creating your render. This can take a few minutes.'}
+              </Alert>
+            ) : null}
+            {render?.imageUrl && !isGenerating && completedRenders > 0 ? (
+              <Alert tone="success" className="dashboard-message">
+                {completedRenders === 1 ? 'Your render is ready.' : `${completedRenders} renders are ready.`}{' '}
+                <Button variant="link" size="xs" className="dashboard-message-action" onClick={() => setIsOverviewOpen(true)}>
+                  {completedRenders === 1 ? 'View render' : 'View latest'}
                 </Button>
-              ) : null}
-              {primaryMaterial && canBrowseLibrary ? (
-                <Button variant="outline" size="xs" shape="pill" onClick={() => void openLibrary('accent')}>
-                  Add accent
-                </Button>
-              ) : null}
-              <Button
-                variant="primary"
-                size="xs"
-                shape="pill"
-                icon="spark"
-                onClick={() => void generateRender()}
-                disabled={selectedUploadType === 'multi' || selectedUploadType === 'reel'}
-                loading={isGenerating}
-                loadingLabel="Generating…"
-                title={selectedUploadType === 'multi' || selectedUploadType === 'reel' ? 'This upload workflow is not connected yet' : undefined}
-              >
-                Generate
-              </Button>
-            </div>
+                {completedRenders > 1 && canOpenFiles ? (
+                  <>
+                    {' · '}
+                    <Button variant="link" size="xs" className="dashboard-message-action" onClick={onOpenFiles}>Open Files</Button>
+                  </>
+                ) : null}
+              </Alert>
+            ) : null}
           </div>
-          {generationError ? <Alert tone="error" className="dashboard-message">{generationError}</Alert> : null}
-          {isGenerating ? <Alert tone="info" className="dashboard-message">Creating your render. This can take a few minutes.</Alert> : null}
-          {render?.imageUrl && !isGenerating ? (
-            <Alert tone="success" className="dashboard-message">
-              Your render is ready.{' '}
-              <Button variant="link" size="xs" className="dashboard-message-action" onClick={() => setIsOverviewOpen(true)}>View render</Button>
-            </Alert>
-          ) : null}
+
+          {/* Step 2: choose a room, in place of the upload step. */}
+          <RoomSelect
+            ref={roomStep}
+            hidden={!isRoomStepOpen}
+            categories={roomLibrary?.categories ?? []}
+            scenes={roomLibrary?.scenes ?? []}
+            isLoading={isLoadingRooms}
+            error={roomsError}
+            onRetry={() => void loadRooms()}
+            confirmLabel={totalCost !== null ? `Continue · ${creditsLabel(totalCost)}` : 'Continue'}
+            onConfirm={confirmRoom}
+            onSkip={() => confirmRoom(null)}
+            onBack={() => setIsRoomStepOpen(false)}
+          />
         </section>
 
         <section
@@ -662,7 +770,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
               <article className="render-result">
                 <div className="render-result-copy">
                   <span>LATEST RENDER</span>
-                  <h3>{primaryMaterial?.name || 'Carpenter preview'}</h3>
+                  <h3>{renderName || 'Carpenter preview'}</h3>
                   <p>{render.generationId ? `Render ${render.generationId}` : 'Your generated scene'}</p>
                 </div>
                 <img src={render.imageUrl} alt="Your generated Carpenter material preview" />
@@ -673,13 +781,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, onCreditsChange }
           </div>
         </section>
       </div>
-
-      <UploadOptionsDialog
-        open={isUploadOptionsOpen}
-        selectedUploadType={selectedUploadType}
-        onClose={closeUploadOptions}
-        onSelect={selectUploadType}
-      />
 
       {isLibraryOpen ? (
         <LibraryDialog

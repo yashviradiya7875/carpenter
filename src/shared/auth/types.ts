@@ -1,7 +1,12 @@
 export type CarpenterCapabilities = {
   canUploadLaminate?: boolean
   laminateSource?: 'own' | 'files_or_upload' | 'sponsor_library' | 'none'
-  filesAccess?: 'full' | 'laminates' | 'none'
+  /**
+   * Files (Drive) access, set by the API per account type:
+   * `full` (Manufacturer) and `unrestricted` (admin and other non-market roles) can manage
+   * folders and files; `laminates` (Dealer Pro) is view-only; `none` has no Files.
+   */
+  filesAccess?: 'full' | 'unrestricted' | 'laminates' | 'none'
   canShare?: boolean
   canDownload?: boolean
   canSaveToFiles?: boolean
@@ -14,6 +19,8 @@ export type AuthAccount = {
   displayName?: string
   role: string
   credits?: number
+  /** Render resolution tier (`1K` | `2K` | `4K`), set per account by an admin; it decides the cost per render. */
+  resolution?: string
   accountStatus?: string
   allowedApps?: string[]
   capabilities?: CarpenterCapabilities

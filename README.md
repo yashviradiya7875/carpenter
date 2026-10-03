@@ -11,7 +11,7 @@ src/
   app/                      Composition root: app shell (global header + page), session gate, view state
   shared/
     ui/                     Portable design system: tokens, primitives, components, layout (see shared/ui/README.md)
-    components/             Carpenter-specific shared UI: AppHeader (the global header), Brand, Mark
+    components/             Carpenter-specific shared UI: AppHeader (the global header), RoomSelect (inline room step for generation flows), Brand, Mark
     api/                    Typed callable client and ApiError
     auth/                   Session storage, account types and account rules (role labels, app access)
   features/

@@ -64,6 +64,7 @@ function Workspace({ account, onSignOut }: { account: AuthAccount; onSignOut: ()
         account={account}
         hidden={view !== 'studio'}
         onOpenFiles={() => setView('files')}
+        credits={credits}
         onCreditsChange={setCredits}
       />
       {view === 'files' ? <FilesPage account={account} onBack={goToStudio} /> : null}

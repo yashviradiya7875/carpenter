@@ -26,7 +26,7 @@ shared/ui/
   tokens/        tokens.css (CSS custom properties) · tokens.ts (JS mirror: breakpoints, durations, z-index)
   styles/        base.css (document defaults, focus ring, .sr-only, motion) · index.css (imports tokens + base)
   primitives/    single-purpose building blocks: Button (+ buttonClasses), Icon, Spinner, Field / TextInput / Select / Textarea
-  components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, AnimatedGridPattern
+  components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, Tabs, AnimatedGridPattern
   layout/        page structure: TopBar
   theme/         ThemeProvider, useTheme, ThemeToggle (light / dark)
   utils/         cx (class-name joiner), focus helpers (focusableWithin, trapFocus), usePrefersReducedMotion
@@ -108,6 +108,7 @@ Animations use `backwards` fill, so an element's own `transform` applies once th
 | `Spinner` | Indeterminate loading inside other UI | `size` sm/md/lg; pass `label` unless nearby text already says what is loading. |
 | `LoadingState` | A region whose content is loading | Spinner + visible message, `role="status"`. `compact` for one row in panels, dialogs and lists. |
 | `Menu` + `MenuItem` / `MenuLabel` / `MenuSeparator` | Dropdown action menus (row actions, account menu) | See [Menu](#menu) below. |
+| `Tabs` | Switching what one panel shows (categories, filters) | `tabs` (`id`, `label`, optional `count`), `value`, `onChange`, `label`, `panelId`. One tab stop; arrow keys / Home / End move and select. Scrolls sideways when crowded. Give the controlled element `role="tabpanel"`. |
 | `ThemeToggle` | Switching light / dark | Ghost icon button; needs `ThemeProvider` above it. |
 | `AnimatedGridPattern` | Decorative page background | Fine grid with cells softly fading in and out. Fills its positioned parent; `pointer-events: none`; hidden from assistive technology. Props: `width` / `height` (cell px), `numSquares`, `duration`, `maxOpacity` (defaults to `--effect-grid-opacity`), `fade` (edge falloff, reshape via `--grid-mask`). Colors from `--effect-grid-line` / `--effect-grid-square` per theme. Holds still under reduced motion. Pure SVG + CSS, no animation library. |
 | `TopBar` | Application header bar | `start` (brand) and `end` (actions) slots; `sticky`; passes header attributes through (e.g. `inert`). Height via `--app-topbar-height`; tighter on phones. |
@@ -200,7 +201,7 @@ Each of these appears once, or its instances differ too much to share an API. Re
 | Pattern | Where | Why not |
 |---|---|---|
 | Breadcrumbs | Files only | Single use |
-| Tabs / segmented control | Files view switcher only | Single use |
+| Segmented control | Files view switcher only | Single use (category tabs are covered by `Tabs`) |
 | Badge | Files access column only | Single use; plain text today |
 | Card | Library product tile, Files grid item, upload-type option, render result | Different content, actions and selection behavior; a shared wrapper would just be a styled `div` |
 | File / folder row, folder tree | Files only | Application-specific (Drive roles, favorites) — stays a feature component |

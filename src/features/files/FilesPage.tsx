@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type For
 import { Slide, toast, ToastContainer } from 'react-toastify'
 import type { AuthAccount } from '../../shared/auth/types'
 import {
+  Alert,
   Button,
   ConfirmDialog,
   Dialog,
@@ -111,7 +112,10 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
   const currentFolderId = currentFolder?.id ?? null
   const hasFilesAccess = account.capabilities?.filesAccess !== undefined
     && account.capabilities.filesAccess !== 'none'
-  const hasFullFilesAccess = account.capabilities?.filesAccess === 'full'
+  // The API allows managing folders and files for `full` and `unrestricted`; `laminates` is view-only.
+  const filesAccess = account.capabilities?.filesAccess
+  const hasFullFilesAccess = filesAccess === 'full' || filesAccess === 'unrestricted'
+  const isViewOnlyAccount = hasFilesAccess && !hasFullFilesAccess
   const canCreateHere = hasFullFilesAccess && (!currentFolder || canEdit(currentFolder.myRole))
   const canUploadHere = canCreateHere && account.capabilities?.canSaveToFiles === true
 
@@ -574,11 +578,19 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
                 Upload images
               </Button>
             ) : null}
-            <Button variant="primary" shape="pill" icon="plus" onClick={() => { setFolderName(''); setIsCreateFolderOpen(true) }} disabled={!canCreateHere} title={!canCreateHere ? 'You need editor access to create a folder here.' : undefined}>
-              New folder
-            </Button>
+            {isViewOnlyAccount ? null : (
+              <Button variant="primary" shape="pill" icon="plus" onClick={() => { setFolderName(''); setIsCreateFolderOpen(true) }} disabled={!canCreateHere} title={!canCreateHere ? 'You need editor access to create a folder here.' : undefined}>
+                New folder
+              </Button>
+            )}
           </div>
         </div>
+
+        {isViewOnlyAccount ? (
+          <Alert tone="info" className="files-access-note">
+            This account can view its laminate files here. Creating folders, uploading, moving and sharing aren’t available for this account type.
+          </Alert>
+        ) : null}
 
         <div className={`files-layout ${isActivityOpen ? 'with-activity' : ''}`}>
           <DriveFolderTree
@@ -642,7 +654,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
               <EmptyState
                 icon={search || favoritesOnly ? 'search' : 'folder'}
                 title={search ? 'No matching items' : favoritesOnly ? 'No favorites yet' : 'This folder is empty'}
-                description={search ? 'Try another search.' : favoritesOnly ? 'Favorite a file or folder to find it here.' : canUploadHere ? 'Upload images or generate a render to see it here.' : 'Create a folder or generate a render to see it here.'}
+                description={search ? 'Try another search.' : favoritesOnly ? 'Favorite a file or folder to find it here.' : canUploadHere ? 'Upload images or generate a render to see it here.' : canCreateHere ? 'Create a folder or generate a render to see it here.' : 'Renders you generate appear here.'}
                 actions={search ? (
                   <Button shape="pill" onClick={() => setSearch('')}>Clear search</Button>
                 ) : favoritesOnly ? (
@@ -759,60 +771,60 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
             </>
           )}
         >
-            {isLoadingShares ? <LoadingState compact label="Loading sharing…" /> : (
-              <>
-                {canManage(shareTarget.myRole) ? (
-                  <Field label="Visibility">
-                    <Select value={shareDraft.visibility} onChange={(event) => setShareDraft((current) => ({ ...current, visibility: event.target.value as ShareDraft['visibility'] }))}>
-                      <option value="private">Private</option><option value="organization">Organization</option><option value="public">Public</option>
-                    </Select>
+          {isLoadingShares ? <LoadingState compact label="Loading sharing…" /> : (
+            <>
+              {canManage(shareTarget.myRole) ? (
+                <Field label="Visibility">
+                  <Select value={shareDraft.visibility} onChange={(event) => setShareDraft((current) => ({ ...current, visibility: event.target.value as ShareDraft['visibility'] }))}>
+                    <option value="private">Private</option><option value="organization">Organization</option><option value="public">Public</option>
+                  </Select>
+                </Field>
+              ) : <p className="files-readonly-note">Only an owner or admin can change sharing settings.</p>}
+
+              <div className="files-permissions">
+                <h3>People with access</h3>
+                {Object.entries(shareDraft.permissions).length ? Object.entries(shareDraft.permissions).map(([username, role]) => (
+                  <div className="files-permission-row" key={username}><span>{username}</span>{canManage(shareTarget.myRole) ? (
+                    <div className="files-permission-controls">
+                      <Select size="sm" aria-label={`Access for ${username}`} value={role} onChange={(event) => setShareDraft((current) => ({ ...current, permissions: { ...current.permissions, [username]: event.target.value as DriveRole } }))}>
+                        {(['admin', 'editor', 'viewer'] as DriveRole[]).map((option) => <option value={option} key={option}>{option}</option>)}
+                      </Select>
+                      <Button variant="destructive" size="xs" shape="pill" onClick={() => setShareDraft((current) => {
+                        const permissions = { ...current.permissions }
+                        delete permissions[username]
+                        return { ...current, permissions }
+                      })}>Remove</Button>
+                    </div>
+                  ) : <small>{role}</small>}</div>
+                )) : <p className="files-muted">No individual access granted.</p>}
+              </div>
+
+              {canManage(shareTarget.myRole) ? (
+                <div className="files-add-permission">
+                  <Field label="Add username"><TextInput value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} /></Field>
+                  <Field label="Role">
+                    <Select value={shareRole} onChange={(event) => setShareRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
                   </Field>
-                ) : <p className="files-readonly-note">Only an owner or admin can change sharing settings.</p>}
-
-                <div className="files-permissions">
-                  <h3>People with access</h3>
-                  {Object.entries(shareDraft.permissions).length ? Object.entries(shareDraft.permissions).map(([username, role]) => (
-                    <div className="files-permission-row" key={username}><span>{username}</span>{canManage(shareTarget.myRole) ? (
-                      <div className="files-permission-controls">
-                        <Select size="sm" aria-label={`Access for ${username}`} value={role} onChange={(event) => setShareDraft((current) => ({ ...current, permissions: { ...current.permissions, [username]: event.target.value as DriveRole } }))}>
-                          {(['admin', 'editor', 'viewer'] as DriveRole[]).map((option) => <option value={option} key={option}>{option}</option>)}
-                        </Select>
-                        <Button variant="destructive" size="xs" shape="pill" onClick={() => setShareDraft((current) => {
-                          const permissions = { ...current.permissions }
-                          delete permissions[username]
-                          return { ...current, permissions }
-                        })}>Remove</Button>
-                      </div>
-                    ) : <small>{role}</small>}</div>
-                  )) : <p className="files-muted">No individual access granted.</p>}
+                  <Button shape="pill" onClick={addSharePermission} disabled={!shareUsername.trim()}>Add</Button>
                 </div>
+              ) : null}
 
-                {canManage(shareTarget.myRole) ? (
-                  <div className="files-add-permission">
-                    <Field label="Add username"><TextInput value={shareUsername} onChange={(event) => setShareUsername(event.target.value)} /></Field>
-                    <Field label="Role">
-                      <Select value={shareRole} onChange={(event) => setShareRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
-                    </Field>
-                    <Button shape="pill" onClick={addSharePermission} disabled={!shareUsername.trim()}>Add</Button>
+              <div className="files-link-section">
+                <h3>Share link</h3>
+                <div className="files-link-controls">
+                  <Select aria-label="Share link access" value={shareLinkRole} onChange={(event) => setShareLinkRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
+                  <Button shape="pill" onClick={() => void createShareLink()} loading={isCreatingLink} loadingLabel="Creating…">{shareLinkTokenValue ? 'Rotate link' : 'Create link'}</Button>
+                </div>
+                {shareLinkTokenValue ? (
+                  <div className="files-link-output">
+                    <span>Link ready</span>
+                    <Button size="sm" shape="pill" onClick={() => void copyShareLink()}>Copy</Button>
+                    <Button variant="destructive" size="sm" shape="pill" onClick={() => void revokeShareLink()} loading={isRevokingLink} loadingLabel="Revoking…">Revoke</Button>
                   </div>
                 ) : null}
-
-                <div className="files-link-section">
-                  <h3>Share link</h3>
-                  <div className="files-link-controls">
-                    <Select aria-label="Share link access" value={shareLinkRole} onChange={(event) => setShareLinkRole(event.target.value as DriveRole)}><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="admin">Admin</option></Select>
-                    <Button shape="pill" onClick={() => void createShareLink()} loading={isCreatingLink} loadingLabel="Creating…">{shareLinkTokenValue ? 'Rotate link' : 'Create link'}</Button>
-                  </div>
-                  {shareLinkTokenValue ? (
-                    <div className="files-link-output">
-                      <span>Link ready</span>
-                      <Button size="sm" shape="pill" onClick={() => void copyShareLink()}>Copy</Button>
-                      <Button variant="destructive" size="sm" shape="pill" onClick={() => void revokeShareLink()} loading={isRevokingLink} loadingLabel="Revoking…">Revoke</Button>
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            )}
+              </div>
+            </>
+          )}
         </Dialog>
       ) : null}
     </main>
