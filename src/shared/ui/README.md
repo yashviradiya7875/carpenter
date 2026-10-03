@@ -26,7 +26,7 @@ shared/ui/
   tokens/        tokens.css (CSS custom properties) · tokens.ts (JS mirror: breakpoints, durations, z-index)
   styles/        base.css (document defaults, focus ring, .sr-only, motion) · index.css (imports tokens + base)
   primitives/    single-purpose building blocks: Button (+ buttonClasses), Icon, Spinner, Field / TextInput / Select / Textarea
-  components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, Tabs, AnimatedGridPattern
+  components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, GeneratingLoader, Tabs, AnimatedGridPattern
   layout/        page structure: TopBar
   theme/         ThemeProvider, useTheme, ThemeToggle (light / dark)
   utils/         cx (class-name joiner), focus helpers (focusableWithin, trapFocus), usePrefersReducedMotion
@@ -94,6 +94,7 @@ Plain CSS: no animation library. Keyframes, enter utilities and the reduced-moti
 | Content appearing in place (lists, panels, expanded groups) | fades up 4px, 200ms | `.app-enter` |
 | Side panel | slides in 12px from the inline end, 200ms | `.app-enter-end` |
 | Ambient background | grid cells fade in and out over 4s at under 10% opacity, then move | `AnimatedGridPattern` |
+| Long AI operation | a softly lit rim rotates (2.6s) while a wave passes through the word; only `transform` and `opacity` animate | `GeneratingLoader` |
 
 Animations use `backwards` fill, so an element's own `transform` applies once the animation ends. To replay an enter animation when content changes, re-mount the element (`key={view}`).
 
@@ -107,6 +108,7 @@ Animations use `backwards` fill, so an element's own `transform` applies once th
 | `Icon` | Inline SVG icons | `name`, optional `size`, `label` (omit = decorative). Inherits `currentColor`. |
 | `Spinner` | Indeterminate loading inside other UI | `size` sm/md/lg; pass `label` unless nearby text already says what is loading. |
 | `LoadingState` | A region whose content is loading | Spinner + visible message, `role="status"`. `compact` for one row in panels, dialogs and lists. |
+| `GeneratingLoader` | Long AI operations (renders, generations) that take over a whole region | Animated orb around a word (`label`, default "Generating"). `message` for one status line, or `messages` + `messageInterval` to step through lines over time (the last one stays; they describe activity, so never promise "almost done"). `progress` (`value`, `max`, `label`) only for measured progress; omit it and the orb is the indeterminate state. `hint`, `showElapsed` (real elapsed time), `size` md/lg. Status is a `role="status"` region; the clock sits outside it. Colors from `--effect-loader-*` per theme. Under reduced motion nothing rotates; the glow keeps a slow fade. |
 | `Menu` + `MenuItem` / `MenuLabel` / `MenuSeparator` | Dropdown action menus (row actions, account menu) | See [Menu](#menu) below. |
 | `Tabs` | Switching what one panel shows (categories, filters) | `tabs` (`id`, `label`, optional `count`), `value`, `onChange`, `label`, `panelId`. One tab stop; arrow keys / Home / End move and select. Scrolls sideways when crowded. Give the controlled element `role="tabpanel"`. |
 | `ThemeToggle` | Switching light / dark | Ghost icon button; needs `ThemeProvider` above it. |

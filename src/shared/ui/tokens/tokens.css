@@ -142,6 +142,12 @@
   --effect-grid-square: var(--palette-violet-300);
   --effect-grid-opacity: 0.07;
 
+  /* Generating loader (GeneratingLoader): white rim light over a faint lavender depth */
+  --effect-loader-rim: rgba(255, 255, 255, 0.8);
+  --effect-loader-glow: rgba(193, 140, 245, 0.34);
+  --effect-loader-depth: rgba(129, 70, 199, 0.1);
+  --effect-loader-halo: rgba(152, 96, 223, 0.1);
+
   /* Avatar */
   --avatar-bg: linear-gradient(145deg, #a3a9b1, #655d72);
   --avatar-text: #17131c;
@@ -382,6 +388,12 @@
   --effect-grid-line: rgba(40, 30, 70, 0.06);
   --effect-grid-square: #9b84d6;
   --effect-grid-opacity: 0.08;
+
+  /* White light is invisible on white: the rim becomes a soft accent line instead */
+  --effect-loader-rim: rgba(101, 68, 173, 0.5);
+  --effect-loader-glow: rgba(115, 82, 189, 0.14);
+  --effect-loader-depth: rgba(115, 82, 189, 0.045);
+  --effect-loader-halo: rgba(115, 82, 189, 0.07);
 
   --avatar-bg: linear-gradient(145deg, #ebe8f0, #d3cddc);
   --avatar-text: #2b2433;

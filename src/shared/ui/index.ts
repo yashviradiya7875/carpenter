@@ -24,6 +24,7 @@ export { AnimatedGridPattern, type AnimatedGridPatternProps } from './components
 export { ConfirmDialog, type ConfirmDialogProps } from './components/ConfirmDialog'
 export { Dialog, type DialogProps, type DialogSize } from './components/Dialog'
 export { EmptyState, type EmptyStateProps } from './components/EmptyState'
+export { GeneratingLoader, type GeneratingLoaderProgress, type GeneratingLoaderProps } from './components/GeneratingLoader'
 export { LoadingState, type LoadingStateProps } from './components/LoadingState'
 export {
   Menu,

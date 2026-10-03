@@ -1,0 +1,160 @@
+/* Loader for long AI operations. Light and colors come from theme tokens (--effect-loader-*). */
+.app-generating {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-muted);
+  text-align: center;
+  animation: app-fade-in var(--duration-slow) var(--ease-standard) backwards;
+}
+
+.app-generating--md {
+  --generating-orb-size: 132px;
+  --generating-word-size: var(--font-size-sm);
+}
+
+.app-generating--lg {
+  --generating-orb-size: 176px;
+  --generating-word-size: var(--font-size-base);
+}
+
+.app-generating-orb {
+  position: relative;
+  width: var(--generating-orb-size);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-3);
+  border-radius: 50%;
+  user-select: none;
+}
+
+/* Soft glow behind the orb; breathes by opacity only. */
+.app-generating-halo {
+  position: absolute;
+  inset: -22%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--effect-loader-halo) 0%, transparent 68%);
+  animation: app-generating-breathe 3.6s ease-in-out infinite;
+}
+
+/*
+ * The lit rim. The shadows never change; only the element rotates, so the animation
+ * stays on the compositor instead of repainting every frame.
+ */
+.app-generating-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow:
+    0 10px 20px 0 var(--effect-loader-rim) inset,
+    0 20px 30px 0 var(--effect-loader-glow) inset,
+    0 60px 60px 0 var(--effect-loader-depth) inset;
+  will-change: transform;
+  animation: app-generating-rotate 2.6s linear infinite;
+}
+
+/* A fainter rim turning the other way, so the light seems to shift rather than spin. */
+.app-generating-ring--trail {
+  inset: 5%;
+  opacity: 0.5;
+  box-shadow: 0 8px 18px 0 var(--effect-loader-glow) inset;
+  animation-duration: 4.8s;
+  animation-direction: reverse;
+}
+
+.app-generating-word {
+  position: relative;
+  display: flex;
+  color: var(--color-text);
+  font-size: var(--generating-word-size);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: 0.03em;
+}
+
+/* A wave passes through the word, one letter after another. */
+.app-generating-letter {
+  display: inline-block;
+  opacity: 0.4;
+  white-space: pre;
+  animation: app-generating-letter 2.6s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.1s);
+}
+
+.app-generating-status {
+  min-height: calc(var(--font-size-md) * var(--line-height-normal));
+}
+
+.app-generating-message {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+}
+
+.app-generating-progress {
+  width: min(220px, 100%);
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-line);
+}
+
+.app-generating-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent-light);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left center;
+  transition: transform var(--duration-slower) var(--ease-out);
+}
+
+.app-generating-meta {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.app-generating-elapsed {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes app-generating-rotate {
+  from { transform: rotate(90deg); }
+  to { transform: rotate(450deg); }
+}
+
+@keyframes app-generating-letter {
+  0%,
+  100% { opacity: 0.4; transform: none; }
+  20% { opacity: 1; transform: scale(1.14); }
+  40% { opacity: 0.7; transform: none; }
+}
+
+@keyframes app-generating-breathe {
+  0%,
+  100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/*
+ * Reduced motion: nothing rotates or moves. The glow keeps a slow fade so the state
+ * still reads as "working". Beats the global near-zero duration rule.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .app-generating-ring,
+  .app-generating-letter {
+    animation: none !important;
+  }
+
+  .app-generating-letter {
+    opacity: 1;
+  }
+
+  .app-generating-halo {
+    animation: app-generating-breathe 3.6s ease-in-out infinite !important;
+  }
+}

@@ -6,6 +6,7 @@ import { Mark } from '../../shared/components/Mark'
 import { RoomSelect } from '../../shared/components/RoomSelect'
 import type { RoomSelection } from '../../shared/components/roomImage'
 import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
+import { GenerationStage, type GenerationStageView } from './components/GenerationStage'
 import { LibraryDialog } from './components/LibraryDialog'
 import { MaterialPill } from './components/MaterialPill'
 import { OverviewStat } from './components/OverviewStat'
@@ -100,10 +101,14 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const [roomLibrary, setRoomLibrary] = useState<RoomLibrary | null>(null)
   const [isLoadingRooms, setIsLoadingRooms] = useState(false)
   const [roomsError, setRoomsError] = useState('')
+  // Generation stage: takes over the content area once a room is confirmed, and stays for the
+  // result or error until the user returns to the studio.
+  const [isStageRequested, setIsStageRequested] = useState(false)
+  const lastRoom = useRef<RoomSelection | null>(null)
   const uploadStep = useRef<HTMLDivElement>(null)
   const roomStep = useRef<HTMLElement>(null)
+  const stage = useRef<HTMLElement>(null)
   const generateButton = useRef<HTMLButtonElement>(null)
-  const roomStepWasOpen = useRef(false)
   const [shareStats, setShareStats] = useState<ShareStats | null>(null)
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
   const overviewTrigger = useRef<HTMLButtonElement>(null)
@@ -171,22 +176,39 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isOverviewOpen])
 
-  // Changing step swaps what the composer shows; move focus along with it.
+  const stageView: GenerationStageView | null = isGenerating ? 'loading'
+    : generationError ? 'error'
+      : render?.imageUrl && completedRenders > 0 ? 'result' : null
+  const isStageOpen = isStageRequested && stageView !== null
+  // What the content area shows: the upload step, the room step, or one state of the stage.
+  const contentView = isStageOpen ? `stage:${stageView}` : isRoomStepOpen ? 'room' : 'upload'
+  const previousContentView = useRef(contentView)
+
+  // Changing view swaps what the content area shows; move focus along with it.
   useEffect(() => {
-    if (isRoomStepOpen) {
-      roomStepWasOpen.current = true
+    const previous = previousContentView.current
+    if (previous === contentView) return
+    previousContentView.current = contentView
+    if (contentView.startsWith('stage')) {
+      // Between stage states, leave focus alone if the user has moved elsewhere (e.g. the header).
+      const active = document.activeElement
+      const isElsewhere = active && active !== document.body && !stage.current?.contains(active)
+      if (!previous.startsWith('stage') || !isElsewhere) stage.current?.focus()
+    } else if (contentView === 'room') {
       roomStep.current?.focus()
-    } else if (roomStepWasOpen.current) {
-      roomStepWasOpen.current = false
-      if (generateButton.current && !generateButton.current.disabled) generateButton.current.focus()
-      else uploadStep.current?.focus()
+    } else if (generateButton.current && !generateButton.current.disabled) {
+      generateButton.current.focus()
+    } else {
+      uploadStep.current?.focus()
     }
-  }, [isRoomStepOpen])
+  }, [contentView])
 
   // Direct upload: the files decide the generation type, there is no type picker.
   const handleUpload = async (files: File[]) => {
     if (!files.length) return
     const selection = classifyUpload(files)
+    // A new upload starts over in the studio; its validation errors belong there, not on the stage.
+    setIsStageRequested(false)
     setGenerationError('')
     if (!selection.ok) {
       setGenerationError(selection.message)
@@ -466,8 +488,12 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     if (!roomLibrary && !isLoadingRooms) void loadRooms()
   }
 
+  // Room confirmed (or a retry): the stage takes over and the render starts at once.
   const confirmRoom = (room: RoomSelection | null) => {
+    if (!canGenerate || isGenerating) return
+    lastRoom.current = room
     setIsRoomStepOpen(false)
+    setIsStageRequested(true)
     void generateRender(room)
   }
 
@@ -542,12 +568,13 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     >
       <AnimatedGridPattern className="dashboard-grid" width={44} height={44} numSquares={24} duration={4} />
       <div className="dashboard-content" inert={isOverviewOpen}>
-        <section className="workspace-intro" aria-labelledby="workspace-title">
+        <section className="workspace-intro app-enter-fade" aria-labelledby="workspace-title" hidden={isStageOpen}>
           <h1 id="workspace-title">Bring your laminates to life.</h1>
           <p>Turn a material into a space your clients can imagine.</p>
         </section>
 
-        <section className="workspace-composer" aria-label="Common workspace">
+        {/* Hidden, not unmounted, while the generation stage is showing: the upload and room stay as they were. */}
+        <section className="workspace-composer app-enter-fade" aria-label="Common workspace" hidden={isStageOpen}>
           <input
             ref={uploadInput}
             className="file-input-hidden"
@@ -670,7 +697,10 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
               <Alert tone="info" className="dashboard-message">
                 {batchProgress
                   ? `Creating render ${Math.min(batchProgress.done + 1, batchProgress.total)} of ${batchProgress.total}. Each can take a few minutes.`
-                  : 'Creating your render. This can take a few minutes.'}
+                  : 'Creating your render. This can take a few minutes.'}{' '}
+                <Button variant="link" size="xs" className="dashboard-message-action" onClick={() => setIsStageRequested(true)}>
+                  View progress
+                </Button>
               </Alert>
             ) : null}
             {render?.imageUrl && !isGenerating && completedRenders > 0 ? (
@@ -704,6 +734,23 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             onBack={() => setIsRoomStepOpen(false)}
           />
         </section>
+
+        {/* Step 3: generating, then the result or the error, in place of the studio content. */}
+        {isStageOpen && stageView ? (
+          <GenerationStage
+            ref={stage}
+            view={stageView}
+            batchProgress={batchProgress}
+            render={render}
+            renderName={renderName}
+            completedRenders={completedRenders}
+            error={generationError}
+            canRetry={canGenerate}
+            onRetry={() => confirmRoom(lastRoom.current)}
+            onBack={() => setIsStageRequested(false)}
+            onOpenFiles={canOpenFiles ? onOpenFiles : undefined}
+          />
+        ) : null}
 
         <section
           className="overview-panel"
