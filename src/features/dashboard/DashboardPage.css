@@ -138,6 +138,25 @@
   margin-bottom: var(--space-4);
 }
 
+/*
+ * Placement step: the room photo needs the height, so the intro always steps aside, and the
+ * photo is capped at what is left once the header, step chrome and overview are counted.
+ */
+.carpenter-dashboard.is-placement-step .workspace-intro {
+  display: none;
+}
+
+.carpenter-dashboard.is-placement-step .workspace-composer {
+  --placement-photo-max-height: clamp(200px, calc(92dvh - 380px), 600px);
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .carpenter-dashboard.is-placement-step .workspace-composer {
+    --placement-photo-max-height: clamp(200px, calc(96dvh - 430px), 520px);
+  }
+}
+
 /* Where height or width is short, the room picker takes the intro's place. */
 @media (max-width: 700px), (max-height: 820px) {
   .carpenter-dashboard.is-room-step .workspace-intro {
@@ -476,6 +495,22 @@
   border-radius: var(--radius-control);
   background: var(--color-overlay-2);
   padding: 7px 10px;
+}
+
+/* Explains what two materials mean, under their pills */
+.selected-materials-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.pending-files-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .pending-files-copy {

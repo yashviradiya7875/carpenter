@@ -3,8 +3,9 @@ import { ApiError } from '../../shared/api/client'
 import { creditCostFor } from '../../shared/auth/pricing'
 import type { AuthAccount } from '../../shared/auth/types'
 import { Mark } from '../../shared/components/Mark'
+import { MaterialPlacement, type PlacementArea } from '../../shared/components/MaterialPlacement'
 import { RoomSelect } from '../../shared/components/RoomSelect'
-import type { RoomSelection } from '../../shared/components/roomImage'
+import { isSameRoom, roomImageUrl, type RoomSelection } from '../../shared/components/roomImage'
 import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
 import { GenerationStage, type GenerationStageView, type ResultNotice } from './components/GenerationStage'
 import { LibraryDialog } from './components/LibraryDialog'
@@ -33,8 +34,8 @@ import {
   type ShareClient,
   type ShareStats,
 } from './dashboardService'
-import type { Collection, MaterialChoice, MaterialSlot, Product, UploadType } from './dashboardTypes'
-import { classifyUpload, fileToMaterial, productToMaterial } from './materials'
+import type { Collection, MaterialChoice, MaterialSlot, PlacementPlan, Product, UploadType } from './dashboardTypes'
+import { classifyUpload, fileToMaterial, materialLabel, planPlacement, productToMaterial } from './materials'
 import { deliverShare, downloadImage, hasShareSheet, sourceTextureUrl } from './renderActions'
 import './DashboardPage.css'
 
@@ -80,6 +81,8 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   // Several images (one render each) or videos; a single image becomes the primary material instead.
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [pendingKind, setPendingKind] = useState<Exclude<UploadType, 'single'>>('multi')
+  // Two uploaded images are used together in one render; kept so they can be rendered separately instead.
+  const [pairFiles, setPairFiles] = useState<File[] | null>(null)
   const [isDropActive, setIsDropActive] = useState(false)
   const [librarySlot, setLibrarySlot] = useState<MaterialSlot>('primary')
   const [collections, setCollections] = useState<Collection[]>([])
@@ -122,6 +125,13 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   // result or error until the user returns to the studio.
   const [isStageRequested, setIsStageRequested] = useState(false)
   const lastRoom = useRef<RoomSelection | null>(null)
+  const lastPlan = useRef<PlacementPlan | null>(null)
+  // Placement step: with two materials on a real room photo, mark where each goes before rendering.
+  // It stays mounted for its room, so the marked areas survive going back; a new room starts it over.
+  const [placementRoom, setPlacementRoom] = useState<RoomSelection | null>(null)
+  const [isPlacementOpen, setIsPlacementOpen] = useState(false)
+  const [placementKey, setPlacementKey] = useState(0)
+  const placementStep = useRef<HTMLElement>(null)
   const uploadStep = useRef<HTMLDivElement>(null)
   const roomStep = useRef<HTMLElement>(null)
   const stage = useRef<HTMLElement>(null)
@@ -203,8 +213,8 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     : generationError ? 'error'
       : render?.imageUrl && completedRenders > 0 ? 'result' : null
   const isStageOpen = isStageRequested && stageView !== null
-  // What the content area shows: the upload step, the room step, or one state of the stage.
-  const contentView = isStageOpen ? `stage:${stageView}` : isRoomStepOpen ? 'room' : 'upload'
+  // What the content area shows: the upload, room or placement step, or one state of the stage.
+  const contentView = isStageOpen ? `stage:${stageView}` : isPlacementOpen ? 'placement' : isRoomStepOpen ? 'room' : 'upload'
   const previousContentView = useRef(contentView)
 
   // Changing view swaps what the content area shows; move focus along with it.
@@ -219,12 +229,44 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       if (!previous.startsWith('stage') || !isElsewhere) stage.current?.focus()
     } else if (contentView === 'room') {
       roomStep.current?.focus()
+    } else if (contentView === 'placement') {
+      placementStep.current?.focus()
     } else if (generateButton.current && !generateButton.current.disabled) {
       generateButton.current.focus()
     } else {
       uploadStep.current?.focus()
     }
   }, [contentView])
+
+  // Two images as the two materials of one render.
+  const combinePair = async (files: File[]) => {
+    try {
+      const [first, second] = await Promise.all(files.map(fileToMaterial))
+      setPrimaryMaterial(first)
+      setAccentMaterial(second)
+      setPendingFiles([])
+      setPairFiles(files)
+      setPlacementRoom(null)
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : messageFor(error))
+    }
+  }
+
+  // The same two images as two renders, one material each.
+  const separatePair = () => {
+    if (!pairFiles) return
+    setPendingFiles(pairFiles)
+    setPendingKind('multi')
+    setPrimaryMaterial(null)
+    setAccentMaterial(null)
+  }
+
+  // Removing the first of two materials leaves the second as the only one.
+  const removeMaterial = (slot: MaterialSlot) => {
+    if (slot === 'primary') setPrimaryMaterial(accentMaterial)
+    setAccentMaterial(null)
+    setPairFiles(null)
+  }
 
   // Direct upload: the files decide the generation type, there is no type picker.
   const handleUpload = async (files: File[]) => {
@@ -240,16 +282,24 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
 
     setRender(null)
     setCompletedRenders(0)
+    setPlacementRoom(null)
     if (selection.kind === 'single') {
       try {
         setPrimaryMaterial(await fileToMaterial(selection.files[0]))
         setAccentMaterial(null)
         setPendingFiles([])
+        setPairFiles(null)
       } catch (error) {
         setGenerationError(error instanceof Error ? error.message : messageFor(error))
       }
       return
     }
+    // Exactly two images: both materials go into one render.
+    if (selection.kind === 'multi' && selection.files.length === 2) {
+      await combinePair(selection.files)
+      return
+    }
+    setPairFiles(null)
     setPendingFiles(selection.files)
     setPendingKind(selection.kind)
     setPrimaryMaterial(null)
@@ -469,6 +519,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       const choice = productToMaterial(await getProduct(account.username, product.id), product)
       if (librarySlot === 'primary') setPrimaryMaterial(choice)
       else setAccentMaterial(choice)
+      setPairFiles(null)
       setIsLibraryOpen(false)
     } catch (error) {
       setLibraryError(messageFor(error))
@@ -511,16 +562,36 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     if (!roomLibrary && !isLoadingRooms) void loadRooms()
   }
 
-  // Room confirmed (or a retry): the stage takes over and the render starts at once.
+  // Room confirmed. Two materials on a real room photo go to the placement step first.
   const confirmRoom = (room: RoomSelection | null) => {
     if (!canGenerate || isGenerating) return
-    lastRoom.current = room
-    setIsRoomStepOpen(false)
-    setIsStageRequested(true)
-    void generateRender(room)
+    if (room && uploadKind === 'single' && primaryMaterial && accentMaterial) {
+      if (!placementRoom || !isSameRoom(placementRoom, room)) setPlacementKey((current) => current + 1)
+      setPlacementRoom(room)
+      setIsRoomStepOpen(false)
+      setIsPlacementOpen(true)
+      return
+    }
+    startGeneration(room, null)
   }
 
-  const generateRender = async (room: RoomSelection | null) => {
+  const confirmPlacement = (areas: PlacementArea[]) => {
+    if (!primaryMaterial || !accentMaterial) return
+    startGeneration(placementRoom, planPlacement([primaryMaterial, accentMaterial], areas))
+  }
+
+  // The last step is confirmed (or a retry): the stage takes over and the render starts at once.
+  const startGeneration = (room: RoomSelection | null, plan: PlacementPlan | null) => {
+    if (!canGenerate || isGenerating) return
+    lastRoom.current = room
+    lastPlan.current = plan
+    setIsRoomStepOpen(false)
+    setIsPlacementOpen(false)
+    setIsStageRequested(true)
+    void generateRender(room, plan)
+  }
+
+  const generateRender = async (room: RoomSelection | null, plan: PlacementPlan | null) => {
     if (!canGenerate || isGenerating) return
     setIsGenerating(true)
     setGenerationError('')
@@ -546,10 +617,13 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           await refreshCredits()
         }
       } else if (primaryMaterial) {
+        // With a placement plan, its roles apply: the material marked on the photo is the accent.
+        const primary = plan?.primary ?? primaryMaterial
+        const accent = plan?.accent ?? accentMaterial
         const startedAt = Date.now()
-        setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial, room))
-        setRenderName(primaryMaterial.name)
-        setRenderSource({ material: primaryMaterial, sceneName: roomName(room), seconds: Math.round((Date.now() - startedAt) / 1000) })
+        setRender(await generateCarpenterRender(account.username, primary, accent, room, plan?.accentRegions))
+        setRenderName(accent ? `${materialLabel(primaryMaterial)} + ${materialLabel(accentMaterial ?? accent)}` : primary.name)
+        setRenderSource({ material: primary, sceneName: roomName(room), seconds: Math.round((Date.now() - startedAt) / 1000) })
         done = 1
         setCompletedRenders(1)
         await refreshCredits()
@@ -671,7 +745,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
 
   return (
     <main
-      className={`carpenter-dashboard app-enter-fade ${isOverviewOpen ? 'is-overview-open' : ''} ${isRoomStepOpen ? 'is-room-step' : ''}`}
+      className={`carpenter-dashboard app-enter-fade ${isOverviewOpen ? 'is-overview-open' : ''} ${isRoomStepOpen || isPlacementOpen ? 'is-room-step' : ''} ${isPlacementOpen ? 'is-placement-step' : ''}`}
       hidden={hidden}
       onPointerMove={updateOverviewAtmosphere}
       onPointerLeave={resetOverviewAtmosphere}
@@ -712,7 +786,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             tabIndex={-1}
           />
           {/* Step 1: upload and configure. Hidden, not unmounted, while a room is being chosen. */}
-          <div ref={uploadStep} className="composer-step app-enter" hidden={isRoomStepOpen} tabIndex={-1}>
+          <div ref={uploadStep} className="composer-step app-enter" hidden={isRoomStepOpen || isPlacementOpen} tabIndex={-1}>
             <button
               className={`material-dropzone ${canUpload || canBrowseLibrary ? '' : 'is-restricted'} ${isDropActive ? 'is-drop-active' : ''}`}
               type="button"
@@ -728,7 +802,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
                   ? 'Upload custom artwork / texture'
                   : canBrowseLibrary ? 'Choose from your manufacturer library' : 'Uploads aren’t available for this account'}</strong>
                 <small>{canUpload
-                  ? uploadKind === 'single' ? '1 image selected · click or drop to replace'
+                  ? uploadKind === 'single' ? `${accentMaterial ? '2 materials selected · one render' : '1 image selected'} · click or drop to replace`
                     : uploadKind === 'multi' ? `${pendingFiles.length} images selected · one render each · click or drop to replace`
                       : uploadKind === 'reel' ? 'Video selected · click or drop to replace'
                         : 'Click or drop here: one image, several images, or a video'
@@ -739,10 +813,23 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             {(primaryMaterial || accentMaterial) ? (
               <div className="selected-materials" aria-live="polite">
                 {primaryMaterial ? (
-                  <MaterialPill label="Primary" material={primaryMaterial} onRemove={() => setPrimaryMaterial(null)} />
+                  <MaterialPill label={accentMaterial ? 'First' : 'Primary'} material={primaryMaterial} onRemove={() => removeMaterial('primary')} />
                 ) : null}
                 {accentMaterial ? (
-                  <MaterialPill label="Accent" material={accentMaterial} onRemove={() => setAccentMaterial(null)} />
+                  <MaterialPill label="Second" material={accentMaterial} onRemove={() => removeMaterial('accent')} />
+                ) : null}
+                {primaryMaterial && accentMaterial ? (
+                  <p className="selected-materials-note">
+                    Both go into one render; you mark where each goes after choosing the room.
+                    {pairFiles ? (
+                      <>
+                        {' '}
+                        <Button variant="link" size="xs" className="dashboard-message-action" disabled={isGenerating} onClick={separatePair}>
+                          Render them separately instead
+                        </Button>
+                      </>
+                    ) : null}
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -753,7 +840,12 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
                   <strong>{pendingFiles.length} {uploadKind === 'reel' ? 'video' : 'product image'}{pendingFiles.length === 1 ? '' : 's'} selected{uploadKind === 'multi' ? ' · one render each' : ''}</strong>
                   <small>{pendingFiles.slice(0, 2).map((file) => file.name).join(', ')}{pendingFiles.length > 2 ? ` +${pendingFiles.length - 2} more` : ''}</small>
                 </span>
-                <Button variant="link" size="xs" disabled={isGenerating} onClick={() => setPendingFiles([])}>Clear</Button>
+                <span className="pending-files-actions">
+                  {uploadKind === 'multi' && pendingFiles.length === 2 ? (
+                    <Button variant="link" size="xs" disabled={isGenerating} onClick={() => void combinePair(pendingFiles)}>Use both in one render</Button>
+                  ) : null}
+                  <Button variant="link" size="xs" disabled={isGenerating} onClick={() => setPendingFiles([])}>Clear</Button>
+                </span>
               </div>
             ) : null}
 
@@ -843,9 +935,27 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             onSkip={() => confirmRoom(null)}
             onBack={() => setIsRoomStepOpen(false)}
           />
+
+          {/* Step 3, for two materials: mark where each goes on the room photo. */}
+          {placementRoom && primaryMaterial && accentMaterial ? (
+            <MaterialPlacement
+              key={placementKey}
+              ref={placementStep}
+              hidden={!isPlacementOpen}
+              roomImageUrl={roomImageUrl(placementRoom)}
+              materials={[primaryMaterial, accentMaterial]}
+              confirmLabel={totalCost !== null ? `Generate · ${creditsLabel(totalCost)}` : 'Generate'}
+              onConfirm={confirmPlacement}
+              onSkip={() => startGeneration(placementRoom, null)}
+              onBack={() => {
+                setIsPlacementOpen(false)
+                setIsRoomStepOpen(true)
+              }}
+            />
+          ) : null}
         </section>
 
-        {/* Step 3: generating, then the result or the error, in place of the studio content. */}
+        {/* Last step: generating, then the result or the error, in place of the studio content. */}
         {isStageOpen && stageView ? (
           <GenerationStage
             ref={stage}
@@ -858,7 +968,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             completedRenders={completedRenders}
             error={generationError}
             canRetry={canGenerate}
-            onRetry={() => confirmRoom(lastRoom.current)}
+            onRetry={() => startGeneration(lastRoom.current, lastPlan.current)}
             onBack={() => setIsStageRequested(false)}
             onDownload={canDownload ? () => void handleDownload() : undefined}
             isDownloading={isDownloading}

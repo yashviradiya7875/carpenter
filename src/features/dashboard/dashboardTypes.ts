@@ -12,6 +12,18 @@ export type MaterialChoice = {
   source: 'upload' | 'library'
 }
 
+/** Where the accent laminate goes on the room photo: a box in 0–1 fractions of its width and height. */
+export type AccentRegion = { x: number; y: number; w: number; h: number }
+
+/** A render with two materials, in the terms the render API takes. */
+export type PlacementPlan = {
+  /** Covers the furniture, apart from the accent regions. */
+  primary: MaterialChoice
+  accent: MaterialChoice
+  /** Empty lets the renderer decide where the accent goes. */
+  accentRegions: AccentRegion[]
+}
+
 export type Collection = { id: string; name: string; productCount?: number }
 export type Product = {
   id: string

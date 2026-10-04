@@ -6,7 +6,7 @@ export type IconName =
   | 'layers' | 'upload' | 'folder' | 'qr' | 'image' | 'spark' | 'expand' | 'video' | 'close' | 'arrow'
   | 'back' | 'trash' | 'more' | 'activity' | 'home' | 'search' | 'star' | 'refresh' | 'plus'
   | 'gridLarge' | 'gridSmall' | 'listView' | 'check' | 'alert' | 'info' | 'eye' | 'eyeOff' | 'sun' | 'moon' | 'camera'
-  | 'download' | 'share'
+  | 'download' | 'share' | 'undo'
 
 const shapes: Record<IconName, ReactNode> = {
   layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="M3 12l9 5 9-5M3 16l9 5 9-5" /></>,
@@ -40,6 +40,7 @@ const shapes: Record<IconName, ReactNode> = {
   moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
   download: <><path d="M12 4v12m0 0-4-4m4 4 4-4" /><path d="M5 14v5h14v-5" /></>,
   share: <><circle cx="18" cy="5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="19" r="2.5" /><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6" /></>,
+  undo: <><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></>,
   camera: <><path d="M4 8h3l1.6-2.5h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" /><circle cx="12" cy="13" r="3.4" /></>,
 }
 

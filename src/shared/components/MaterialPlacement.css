@@ -1,0 +1,311 @@
+/* Material placement step, inside a StepPanel. */
+.material-placement {
+  /*
+   * Marks are drawn over a photo, not over the theme's surfaces, so their colors stay the
+   * same in light and dark: a soft violet for Material 1, white for Material 2, each with
+   * a dark edge so it reads on any photo. Numbers and line style tell them apart too.
+   */
+  --placement-1: var(--palette-violet-300);
+  --placement-1-fill: rgba(193, 140, 245, 0.26);
+  --placement-2: #ffffff;
+  --placement-2-fill: rgba(255, 255, 255, 0.24);
+  --placement-edge: rgba(12, 10, 18, 0.55);
+  --placement-ink: #17131f;
+}
+
+/* Material selector on the left, editing actions on the right */
+.placement-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-5);
+}
+
+.placement-materials {
+  min-width: 0;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.placement-material {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-overlay-1);
+  padding: var(--space-1-5) var(--space-3) var(--space-1-5) var(--space-1-5);
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.placement-material:hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-faint);
+}
+
+/* The material being placed: accent border and tint, plus aria-pressed for assistive technology. */
+.placement-material.is-active {
+  border-color: var(--color-accent-light);
+  background: var(--color-accent-subtle);
+  box-shadow: 0 0 0 1px var(--color-accent-light);
+  color: var(--color-text);
+}
+
+.placement-material-swatch {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-media-bg);
+  color: var(--color-accent-muted);
+}
+
+.placement-material-swatch img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.placement-material-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.placement-material-copy strong {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.placement-material-copy small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The material's number, in its mark color: on the selector swatch and on each area. */
+.placement-tag {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--placement-edge);
+  color: var(--placement-ink);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.placement-material--1 .placement-tag,
+.placement-area--1 .placement-tag {
+  background: var(--placement-1);
+}
+
+.placement-material--2 .placement-tag,
+.placement-area--2 .placement-tag {
+  background: var(--placement-2);
+}
+
+.placement-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.placement-problem {
+  flex: 0 0 auto;
+  margin: var(--space-3) var(--space-5) 0;
+}
+
+/* Scrolls if the photo and its hint don't fit, so Back and Generate stay in view. */
+.placement-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-5) var(--space-4);
+}
+
+/* Shrink-wraps the photo, so the surface on top maps one to one onto it. */
+.placement-canvas {
+  position: relative;
+  max-width: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-media-bg);
+  line-height: 0;
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-standard);
+}
+
+.placement-canvas.is-ready {
+  opacity: 1;
+}
+
+/* The host can set --placement-photo-max-height to what its layout leaves free, so the whole photo stays in view. */
+.placement-canvas img {
+  display: block;
+  max-width: 100%;
+  max-height: var(--placement-photo-max-height, min(48vh, 520px));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* `touch-action: none` lets a finger draw instead of scrolling the page. */
+.placement-surface {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+/* A marked area. Clicks pass through to the surface, so a new area can start on top of one. */
+.placement-area {
+  position: absolute;
+  border: 1.5px solid var(--placement-color);
+  border-radius: var(--radius-sm);
+  background: var(--placement-fill);
+  box-shadow: 0 0 0 1px var(--placement-edge);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+  animation: app-pop-in var(--duration-fast) var(--ease-out) backwards;
+}
+
+.placement-area--1 {
+  --placement-color: var(--placement-1);
+  --placement-fill: var(--placement-1-fill);
+}
+
+.placement-area--2 {
+  --placement-color: var(--placement-2);
+  --placement-fill: var(--placement-2-fill);
+  border-style: dashed;
+}
+
+/* Areas of the material being placed stand out; the other material's step back. */
+.placement-area.is-active {
+  opacity: 1;
+}
+
+.placement-area:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.placement-area .placement-tag {
+  top: var(--space-1);
+  left: var(--space-1);
+}
+
+/* The box being dragged out */
+.placement-draft {
+  opacity: 1;
+  animation: none;
+  transition: none;
+}
+
+.placement-draft.is-invalid {
+  --placement-color: var(--color-danger);
+  --placement-fill: var(--color-danger-bg);
+}
+
+.placement-area-remove {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--placement-edge);
+  color: #ffffff;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.placement-area-remove:hover {
+  background: var(--placement-ink);
+}
+
+.placement-area-remove .app-icon {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.4;
+}
+
+.placement-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  text-align: center;
+}
+
+@media (pointer: coarse) {
+  .placement-area-remove {
+    width: 28px;
+    height: 28px;
+  }
+
+  .placement-area-remove .app-icon {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+@media (max-width: 760px) {
+  .placement-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+  }
+
+  .placement-material {
+    flex: 1 1 0;
+  }
+
+  .placement-actions .app-button {
+    flex: 1;
+  }
+
+  .placement-problem {
+    margin-inline: var(--space-3);
+  }
+
+  .placement-body {
+    padding: var(--space-3);
+  }
+
+  /* The hint under the photo says the same; the photo needs the height more. */
+  .material-placement .step-panel-heading p {
+    display: none;
+  }
+}

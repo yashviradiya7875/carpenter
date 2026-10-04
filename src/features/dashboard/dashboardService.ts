@@ -1,6 +1,6 @@
 import { API_BASE_URL, ApiError, callApi, callApiMultipart } from '../../shared/api/client'
 import type { RoomCategory, RoomScene, RoomSelection } from '../../shared/components/roomImage'
-import type { Collection, MaterialChoice, Product, ProductDetails } from './dashboardTypes'
+import type { AccentRegion, Collection, MaterialChoice, Product, ProductDetails } from './dashboardTypes'
 
 type RequestOptions = { signal?: AbortSignal }
 
@@ -166,12 +166,15 @@ export function roomName(room: RoomSelection | null): string {
 /**
  * Renders a primary laminate (and optional accent) onto a room: a library scene,
  * the user's own photo, or - with no room - an interior the model invents.
+ * `accentRegions` mark where the accent goes on a real room photo; without them the
+ * renderer decides.
  */
 export function generateCarpenterRender(
   username: string,
   primary: MaterialChoice,
   accent: MaterialChoice | null,
   room: RoomSelection | null = null,
+  accentRegions: AccentRegion[] = [],
 ) {
   const data: Record<string, unknown> = {
     username,
@@ -200,6 +203,7 @@ export function generateCarpenterRender(
     data.accentLaminateBase64 = accent.base64
     data.accentLaminateMimeType = accent.mimeType
   }
+  if (accent && room && accentRegions.length) data.accentRegions = accentRegions
   return callApi<GenerationResult, Record<string, unknown>>('generateCarpenter', data)
 }
 

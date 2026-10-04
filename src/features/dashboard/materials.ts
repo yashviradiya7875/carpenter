@@ -1,4 +1,4 @@
-import type { MaterialChoice, Product, ProductDetails, UploadType } from './dashboardTypes'
+import type { MaterialChoice, PlacementPlan, Product, ProductDetails, UploadType } from './dashboardTypes'
 
 /** Largest single image accepted as a render material. */
 export const MAX_RENDER_MATERIAL_BYTES = 20 * 1024 * 1024
@@ -88,5 +88,31 @@ export function productToMaterial(details: ProductDetails, listed: Product): Mat
     imageId: image.id,
     imageUrl: image.thumbUrl || image.url || listed.thumbUrl || listed.coverThumbUrl || listed.imageUrl,
     source: 'library',
+  }
+}
+
+/** A material's name without its file extension, for showing it to the user. */
+export function materialLabel(material: MaterialChoice): string {
+  return material.name.replace(/\.[a-z0-9]{2,5}$/i, '')
+}
+
+/**
+ * Turns the areas marked for two materials into what the render API takes: one laminate
+ * for the furniture as a whole and a second (the accent) for marked boxes. The material
+ * with marked areas becomes the accent; when both have areas, the second material's are
+ * sent and the first covers everything else, which includes its own marked areas.
+ */
+export function planPlacement(
+  materials: [MaterialChoice, MaterialChoice],
+  areas: Array<{ material: 0 | 1; x: number; y: number; w: number; h: number }>,
+): PlacementPlan {
+  const round = (value: number) => Math.round(value * 1000) / 1000
+  const marked = areas.some((area) => area.material === 1) ? 1 : 0
+  return {
+    primary: materials[marked === 1 ? 0 : 1],
+    accent: materials[marked],
+    accentRegions: areas
+      .filter((area) => area.material === marked)
+      .map((area) => ({ x: round(area.x), y: round(area.y), w: round(area.w), h: round(area.h) })),
   }
 }

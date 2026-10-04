@@ -100,3 +100,15 @@ export async function fileToRoomImage(file: File): Promise<CustomRoom> {
     aspectRatio: nearestAspectRatio(width, height),
   }
 }
+
+/** The photo of a chosen room, for showing it back to the user. */
+export function roomImageUrl(selection: RoomSelection): string {
+  return selection.kind === 'custom'
+    ? selection.room.previewUrl
+    : selection.scene.imageUrl ?? selection.scene.thumbUrl ?? ''
+}
+
+export function isSameRoom(a: RoomSelection, b: RoomSelection): boolean {
+  if (a.kind === 'scene') return b.kind === 'scene' && a.scene.id === b.scene.id
+  return b.kind === 'custom' && a.room === b.room
+}

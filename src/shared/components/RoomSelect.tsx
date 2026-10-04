@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type ChangeEvent, type ReactNode, type Ref } from 'react'
 import { Alert, Button, cx, EmptyState, Icon, LoadingState, Tabs } from '../ui'
+import { StepPanel } from './StepPanel'
 import { fileToRoomImage, type CustomRoom, type RoomCategory, type RoomScene, type RoomSelection } from './roomImage'
 import './RoomSelect.css'
 
@@ -56,7 +57,6 @@ export function RoomSelect({
   ref,
   className,
 }: RoomSelectProps) {
-  const titleId = useId()
   const panelId = useId()
   const [selection, setSelection] = useState<RoomSelection | null>(initialSelection)
   const [customRoom, setCustomRoom] = useState<CustomRoom | null>(initialSelection?.kind === 'custom' ? initialSelection.room : null)
@@ -92,18 +92,30 @@ export function RoomSelect({
   const selectedSceneId = selection?.kind === 'scene' ? selection.scene.id : null
 
   return (
-    <section ref={ref} className={cx('room-select app-enter', className)} hidden={hidden} tabIndex={-1} aria-labelledby={titleId}>
+    <StepPanel
+      ref={ref}
+      className={cx('room-select', className)}
+      hidden={hidden}
+      title={title}
+      description={description}
+      onBack={onBack}
+      backLabel={backLabel}
+      footer={(
+        <>
+          <span className="step-panel-summary" role="status">
+            {selection
+              ? `${selection.kind === 'custom' ? 'Your room' : selection.scene.name} selected`
+              : 'Select a room to continue'}
+          </span>
+          <Button variant="primary" size="sm" shape="pill" disabled={!selection || isPreparing} onClick={() => selection && onConfirm(selection)}>
+            {confirmLabel}
+          </Button>
+        </>
+      )}
+    >
       <input ref={uploadInput} className="room-select-input" type="file" accept="image/*" onChange={(event) => void handleFile(event)} tabIndex={-1} />
       {/* `capture` opens the rear camera on phones; elsewhere it behaves like a normal picker. */}
       <input ref={cameraInput} className="room-select-input" type="file" accept="image/*" capture="environment" onChange={(event) => void handleFile(event)} tabIndex={-1} />
-
-      <header className="room-select-header">
-        <Button className="room-select-back" variant="ghost" size="sm" shape="pill" icon="back" onClick={onBack}>{backLabel}</Button>
-        <div className="room-select-heading">
-          <h2 id={titleId}>{title}</h2>
-          {description ? <p>{description}</p> : null}
-        </div>
-      </header>
 
       <div className="room-select-toolbar">
         {categories.length ? (
@@ -201,18 +213,7 @@ export function RoomSelect({
           </>
         )}
       </div>
-
-      <footer className="room-select-footer">
-        <span className="room-select-summary" role="status">
-          {selection
-            ? `${selection.kind === 'custom' ? 'Your room' : selection.scene.name} selected`
-            : 'Select a room to continue'}
-        </span>
-        <Button variant="primary" size="sm" shape="pill" disabled={!selection || isPreparing} onClick={() => selection && onConfirm(selection)}>
-          {confirmLabel}
-        </Button>
-      </footer>
-    </section>
+    </StepPanel>
   )
 }
 
