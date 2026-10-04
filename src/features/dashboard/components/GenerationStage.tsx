@@ -1,5 +1,5 @@
 import { useState, type Ref } from 'react'
-import { Alert, Button, cx, EmptyState, GeneratingLoader, Spinner } from '../../../shared/ui'
+import { Alert, Button, cx, EmptyState, GeneratingLoader, Icon, Spinner } from '../../../shared/ui'
 import type { GenerationResult } from '../dashboardService'
 
 export type GenerationStageView = 'loading' | 'result' | 'error'
@@ -8,7 +8,7 @@ export type GenerationStageView = 'loading' | 'result' | 'error'
 // alone and the last one stays: none of them may claim the render is nearly finished.
 const RENDER_MESSAGES = ['Preparing your room', 'Applying your laminate', 'Rendering the visualization']
 
-/** Feedback for a result action (download, share, save), shown above the action bar. */
+/** Feedback for a result action (download, share, save), shown under the actions. */
 export type ResultNotice = {
   tone: 'success' | 'info' | 'error'
   message: string
@@ -21,6 +21,10 @@ type GenerationStageProps = {
   batchProgress: { done: number; total: number } | null
   render: GenerationResult | null
   renderName: string
+  /** The room the render was placed in. */
+  sceneName?: string
+  /** How long the render took, when it was timed. */
+  renderSeconds?: number
   completedRenders: number
   error: string
   canRetry: boolean
@@ -47,6 +51,8 @@ export function GenerationStage({
   batchProgress,
   render,
   renderName,
+  sceneName,
+  renderSeconds,
   completedRenders,
   error,
   canRetry,
@@ -61,6 +67,14 @@ export function GenerationStage({
   onDismissNotice,
   ref,
 }: GenerationStageProps) {
+  // What was rendered, where, and how long it took: the line under the result heading.
+  const resultDetails = [
+    completedRenders > 1 ? `Latest of ${completedRenders}` : '',
+    renderName.replace(/\.[a-z0-9]{2,5}$/i, ''),
+    sceneName ?? '',
+    typeof renderSeconds === 'number' ? `Rendered in ${formatDuration(renderSeconds)}` : '',
+  ].filter(Boolean)
+
   return (
     <section ref={ref} className="generation-stage app-enter-fade" tabIndex={-1} aria-label="Render generation">
       <p className="sr-only" role="status">
@@ -99,10 +113,52 @@ export function GenerationStage({
             />
           </div>
         ) : (
+          // Reads top to bottom: what it is, the render itself, what to do with it.
           <article className="generation-result">
+            <header className="generation-result-header">
+              <h2>
+                <span className="generation-result-badge" aria-hidden="true"><Icon name="check" /></span>
+                {completedRenders > 1 ? `${completedRenders} renders are ready` : 'Your render is ready'}
+              </h2>
+              {resultDetails.length ? (
+                <ul className="generation-result-details">
+                  {resultDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              ) : null}
+            </header>
+
             <div className="generation-result-frame">
               {render?.imageUrl ? <RenderImage key={render.imageUrl} src={render.imageUrl} /> : null}
             </div>
+
+            {/* One quiet surface: secondary actions first, the main one last. */}
+            <div className="generation-result-actions" role="group" aria-label="Render actions">
+              {onDownload ? (
+                <Button variant="ghost" size="sm" shape="pill" icon="download" loading={isDownloading} loadingLabel="Downloading…" onClick={onDownload}>
+                  Download
+                </Button>
+              ) : null}
+              {onSaveToFiles ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  shape="pill"
+                  icon={saveStatus === 'saved' ? 'check' : 'folder'}
+                  disabled={saveStatus === 'saved'}
+                  loading={saveStatus === 'saving'}
+                  loadingLabel="Saving…"
+                  onClick={onSaveToFiles}
+                >
+                  {saveStatus === 'saved' ? 'Saved to Files' : 'Save to Files'}
+                </Button>
+              ) : null}
+              {/* The main action when sharing isn't available to this account. */}
+              <Button variant={onShare ? 'ghost' : 'primary'} size="sm" shape="pill" icon="plus" onClick={onBack}>New render</Button>
+              {onShare ? (
+                <Button variant="primary" size="sm" shape="pill" icon="share" onClick={onShare}>Share</Button>
+              ) : null}
+            </div>
+
             {notice ? (
               <Alert key={notice.message} tone={notice.tone} className="generation-result-notice" onDismiss={onDismissNotice}>
                 {notice.message}
@@ -114,42 +170,15 @@ export function GenerationStage({
                 ) : null}
               </Alert>
             ) : null}
-            <footer className="generation-result-bar">
-              <div className="generation-result-copy">
-                <span>{completedRenders > 1 ? `Latest of ${completedRenders} renders` : 'Render ready'}</span>
-                <h2>{renderName || 'Carpenter preview'}</h2>
-              </div>
-              <div className="generation-result-actions">
-                {onDownload ? (
-                  <Button size="sm" shape="pill" icon="download" loading={isDownloading} loadingLabel="Downloading…" onClick={onDownload}>
-                    Download
-                  </Button>
-                ) : null}
-                {onShare ? (
-                  <Button variant="primary" size="sm" shape="pill" icon="share" onClick={onShare}>Share</Button>
-                ) : null}
-                {onSaveToFiles ? (
-                  <Button
-                    size="sm"
-                    shape="pill"
-                    icon={saveStatus === 'saved' ? 'check' : 'folder'}
-                    disabled={saveStatus === 'saved'}
-                    loading={saveStatus === 'saving'}
-                    loadingLabel="Saving…"
-                    onClick={onSaveToFiles}
-                  >
-                    {saveStatus === 'saved' ? 'Saved to Files' : 'Save to Files'}
-                  </Button>
-                ) : null}
-                {/* The main action when sharing isn't available to this account. */}
-                <Button variant={onShare ? 'secondary' : 'primary'} size="sm" shape="pill" icon="plus" onClick={onBack}>New render</Button>
-              </div>
-            </footer>
           </article>
         )}
       </div>
     </section>
   )
+}
+
+function formatDuration(seconds: number): string {
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
 /** The finished render; fades in once the image itself has loaded. */

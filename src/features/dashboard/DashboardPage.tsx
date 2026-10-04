@@ -98,7 +98,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const [render, setRender] = useState<GenerationResult | null>(null)
   const [renderName, setRenderName] = useState('')
   // What the latest render was made from; Save to Files stores the laminate beside the render.
-  const [renderSource, setRenderSource] = useState<{ material: MaterialChoice; sceneName: string } | null>(null)
+  const [renderSource, setRenderSource] = useState<{ material: MaterialChoice; sceneName: string; seconds: number } | null>(null)
   // Result actions: download, save to Files, share.
   const [isDownloading, setIsDownloading] = useState(false)
   const [isSavingToFiles, setIsSavingToFiles] = useState(false)
@@ -534,20 +534,22 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
         setBatchProgress({ done: 0, total })
         for (const file of [...pendingFiles]) {
           const material = await fileToMaterial(file)
+          const startedAt = Date.now()
           const result = await generateCarpenterRender(account.username, material, null, room)
           done += 1
           setRender(result)
           setRenderName(material.name)
-          setRenderSource({ material, sceneName: roomName(room) })
+          setRenderSource({ material, sceneName: roomName(room), seconds: Math.round((Date.now() - startedAt) / 1000) })
           setCompletedRenders(done)
           setBatchProgress({ done, total })
           setPendingFiles((current) => current.filter((item) => item !== file))
           await refreshCredits()
         }
       } else if (primaryMaterial) {
+        const startedAt = Date.now()
         setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial, room))
         setRenderName(primaryMaterial.name)
-        setRenderSource({ material: primaryMaterial, sceneName: roomName(room) })
+        setRenderSource({ material: primaryMaterial, sceneName: roomName(room), seconds: Math.round((Date.now() - startedAt) / 1000) })
         done = 1
         setCompletedRenders(1)
         await refreshCredits()
@@ -851,6 +853,8 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             batchProgress={batchProgress}
             render={render}
             renderName={renderName}
+            sceneName={renderSource?.sceneName}
+            renderSeconds={renderSource?.seconds}
             completedRenders={completedRenders}
             error={generationError}
             canRetry={canGenerate}
