@@ -11,6 +11,11 @@ export function isShared(resource: { myRole?: string; visibility?: string }): bo
   return resource.visibility === 'organization' || resource.visibility === 'public'
 }
 
+/** A role as shown in a list: "Owner", "Viewer"… */
+export function accessLabel(role?: string): string {
+  return role ? `${role[0].toUpperCase()}${role.slice(1)}` : '—'
+}
+
 /** Owners and admins can change sharing and delete folders. */
 export function canManage(role?: string): boolean {
   return role === 'owner' || role === 'admin'

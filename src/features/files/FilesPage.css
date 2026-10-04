@@ -781,7 +781,7 @@
 
 .files-page .Toastify__toast {
   min-height: 48px;
-  border: 1px solid var(--color-line-strong);
+  border: 1px solid var(--color-line);
   border-radius: 8px;
   background: var(--color-surface-raised);
   color: var(--color-text);

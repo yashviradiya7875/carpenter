@@ -6,7 +6,7 @@ import { Mark } from '../../shared/components/Mark'
 import { MaterialPlacement, type PlacementArea } from '../../shared/components/MaterialPlacement'
 import { RoomSelect } from '../../shared/components/RoomSelect'
 import { isSameRoom, roomImageUrl, type RoomSelection } from '../../shared/components/roomImage'
-import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
+import { Alert, AnimatedGridPattern, Button, Skeleton, trapFocus } from '../../shared/ui'
 import { GenerationStage, type GenerationStageView, type ResultNotice } from './components/GenerationStage'
 import { LibraryDialog } from './components/LibraryDialog'
 import { MaterialPill } from './components/MaterialPill'
@@ -718,7 +718,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
                   ? 'Upload custom artwork / texture'
                   : canBrowseLibrary ? 'Choose from your manufacturer library' : 'Uploads aren’t available for this account'}</strong>
                 <small>{canUpload
-                  ? uploadKind === 'single' ? `${accentMaterial ? '2 materials selected · one render' : '1 image selected'} · click or drop to replace`
+                  ? uploadKind === 'single' ? `${accentMaterial ? '2 materials selected · one render' : primaryMaterial?.source === 'library' ? 'Library laminate selected' : '1 image selected'} · click or drop to replace`
                     : uploadKind === 'multi' ? `${pendingFiles.length} images selected · one render each · click or drop to replace`
                       : uploadKind === 'reel' ? 'Video selected · click or drop to replace'
                         : 'Click or drop here: one image, several images, or a video'
@@ -909,6 +909,12 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
         >
           <header className="overview-header">
             <h2 id="overview-title">Overview</h2>
+            {/* The figures at a glance; expanding shows them with the latest render. */}
+            <ul className="overview-summary" aria-busy={shareStats === undefined || undefined}>
+              <li><strong>{shareStats === undefined ? <Skeleton variant="text" width={20} /> : shareStats ? shareStats.total ?? 0 : '—'}</strong> share attempts</li>
+              <li><strong>{shareStats === undefined ? <Skeleton variant="text" width={20} /> : shareStats ? shareStats.uniqueClients ?? 0 : '—'}</strong> clients</li>
+              <li><strong>{shareStats === undefined ? <Skeleton variant="text" width={20} /> : shareStats ? dueFollowUps : '—'}</strong> follow-ups</li>
+            </ul>
             <Button
               ref={overviewTrigger}
               variant="ghost"

@@ -172,7 +172,7 @@ export function RoomSelect({
             onClick={() => setSelection({ kind: 'custom', room: customRoom })}
           >
             <img src={customRoom.previewUrl} alt="" />
-            {isCustomSelected ? <span className="room-tile-check"><Icon name="check" /></span> : null}
+            {isCustomSelected ? <span className="app-check-badge room-tile-check"><Icon name="check" /></span> : null}
           </button>
         ) : (
           <span className="room-custom-icon" aria-hidden="true"><Icon name="camera" /></span>
@@ -304,7 +304,7 @@ function RoomTile({ name, imageUrl, selected, onSelect }: RoomTileProps) {
     <button className={cx('room-tile', selected && 'is-selected')} type="button" aria-pressed={selected} onClick={onSelect}>
       <span className="room-tile-media">
         {imageUrl ? <img src={imageUrl} alt="" loading="lazy" /> : <Icon name="image" />}
-        {selected ? <span className="room-tile-check"><Icon name="check" /></span> : null}
+        {selected ? <span className="app-check-badge room-tile-check"><Icon name="check" /></span> : null}
       </span>
       <span className="room-tile-name">{name}</span>
     </button>

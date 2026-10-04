@@ -24,7 +24,7 @@ import { Button, Dialog, Field, TextInput } from '../../shared/ui'
 ```
 shared/ui/
   tokens/        tokens.css (CSS custom properties) · tokens.ts (JS mirror: breakpoints, durations, z-index)
-  styles/        base.css (document defaults, focus ring, .sr-only, motion) · index.css (imports tokens + base)
+  styles/        base.css (document defaults, focus ring, .sr-only, .app-check-badge, motion) · index.css (imports tokens + base)
   primitives/    single-purpose building blocks: Button (+ buttonClasses), Icon, Spinner, Skeleton, Field / TextInput / Select / Textarea
   components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, GeneratingLoader, Tabs, AnimatedGridPattern
   layout/        page structure: TopBar
@@ -94,6 +94,7 @@ Plain CSS: no animation library. Keyframes, enter utilities and the reduced-moti
 | View change | fades in, 200ms | `.app-enter-fade` |
 | Content appearing in place (lists, panels, expanded groups) | fades up 4px, 200ms | `.app-enter` |
 | Side panel | slides in 12px from the inline end, 200ms | `.app-enter-end` |
+| Selection | a check badge pops in on the selected tile, 150ms | `.app-check-badge` |
 | Ambient background | grid cells fade in and out over 4s at under 10% opacity, then move | `AnimatedGridPattern` |
 | Long AI operation | a softly lit rim rotates (2.6s) while a wave passes through the word; only `transform` and `opacity` animate | `GeneratingLoader` |
 
@@ -257,3 +258,9 @@ Each of these appears once, or its instances differ too much to share an API. Re
 - **Low-specificity components.** Classes are `app-<component>` with BEM modifiers (`app-button--primary`). Pass `className` for feature-specific layout; avoid restyling component internals.
 - **Composable, not configurable.** Components take content via `children` and slots (`footer`, `actions`, `endSlot`) rather than many flags.
 - **Portable.** Never import from `features/` here. Product names, copy and API calls stay in features.
+
+## Surfaces
+
+Cards, panels, dialogs and menus sit on a quiet line (`--border-subtle`) plus their shadow or a slightly different surface color. The stronger accent line (`--border-strong`, `--color-line-strong`) is for emphasis only: a dashed drop target, a selected item. Inside a surface, prefer a faint divider (`--color-line-faint`) or spacing over another bordered box, and let hover and selection add the background rather than drawing every item's frame all the time.
+
+Selected tiles and cards show `.app-check-badge` (an accent disc with a check) as well as their accent outline, so selection never depends on color alone. The tile positions the badge.

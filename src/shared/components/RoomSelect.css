@@ -215,25 +215,11 @@
   height: 22px;
 }
 
+/* The shared check badge (.app-check-badge), placed in the photo's corner. */
 .room-tile-check {
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: var(--shadow-sm);
-  color: var(--color-text-on-accent);
-  animation: app-pop-in var(--duration-fast) var(--ease-out) backwards;
-}
-
-.room-tile-check .app-icon {
-  width: 13px;
-  height: 13px;
-  stroke-width: 2.4;
 }
 
 .room-tile-name {

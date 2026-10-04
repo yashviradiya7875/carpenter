@@ -113,7 +113,7 @@
   flex: 0 0 auto;
   margin: clamp(18px, 4vh, 40px) auto 0;
   overflow: hidden;
-  border: 1px solid var(--color-line-strong);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-panel);
   background: var(--background-composer);
   box-shadow: var(--shadow-composer);
@@ -419,16 +419,17 @@
   display: none;
 }
 
+/* The upload area spans the composer: the main thing to do here, with room to drop onto. */
 .material-dropzone {
-  min-height: 60px;
+  min-height: 88px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 13px;
-  margin: 30px auto 30px;
-  width: min(calc(100% - 56px), 300px);
+  gap: var(--space-3);
+  margin: var(--space-5) auto;
+  width: calc(100% - var(--space-10));
   border: 1px dashed var(--color-accent-line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--color-accent-faint);
   color: var(--color-accent-light);
   padding: 16px;
@@ -482,14 +483,15 @@
 }
 
 .dropzone-copy strong {
-  color: var(--color-accent-light);
-  font-size: 11px;
-  font-weight: 650;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .dropzone-copy small {
   color: var(--color-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
 }
 
 .selected-materials {
@@ -691,7 +693,7 @@
   flex: 0 0 auto;
   margin-top: auto;
   overflow: hidden;
-  border: 1px solid var(--color-line-strong);
+  border: 1px solid var(--color-line);
   border-bottom: 0px !important;
   border-radius: var(--radius-panel);
   border-bottom-left-radius: 0px !important;
@@ -792,12 +794,53 @@
 }
 
 .overview-header {
-  min-height: 84px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-4);
   border-bottom: 1px solid var(--dash-line);
   padding: 0 26px 0 44px;
+}
+
+/* The figures at a glance, in the strip itself; the expanded overview has the detail. */
+.overview-summary {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin: 0 var(--space-2) 0 auto;
+  padding: 0;
+  list-style: none;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.overview-summary li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1-5);
+}
+
+.overview-summary strong {
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tablets drop the gaps; phones leave the strip to its title, with the figures one tap away. */
+@media (max-width: 860px) {
+  .overview-summary {
+    gap: var(--space-4);
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-summary {
+    display: none;
+  }
 }
 
 .overview-header h2 {
@@ -894,9 +937,12 @@
   background: var(--color-media-bg);
 }
 
-/* Shared Dialog panel; the library manages its own scrolling regions. */
+/*
+ * Library popup: a compact picker. One search field, a slim list of collections, and the
+ * laminates of the open one as borderless tiles. Only the two lists scroll.
+ */
 .app-dialog.library-dialog {
-  height: min(82svh, 780px);
+  height: min(78svh, 640px);
 }
 
 .library-dialog .app-dialog-body {
@@ -906,214 +952,166 @@
 }
 
 .library-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--color-line);
-  background: var(--color-overlay-1);
+  flex: 0 0 auto;
+  padding: 0 var(--space-5) var(--space-3);
 }
 
-.library-search {
-  flex: 1;
+.library-message {
+  flex: 0 0 auto;
+  margin: 0 var(--space-5) var(--space-3);
 }
 
-.library-body {
-  min-height: 310px;
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  overflow: auto;
-  background: var(--color-surface-inset);
-  padding: 24px;
-}
-
-.collection-list,
-.library-grid {
-  width: 100%;
-  overflow: auto;
-  padding: 10px 18px 18px;
+.library-empty {
+  flex: 1 1 auto;
 }
 
 .library-browser {
-  width: 100%;
-  height: 100%;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: minmax(180px, 0.78fr) minmax(0, 2fr);
-  gap: 18px;
+  grid-template-columns: 208px minmax(0, 1fr);
+  border-top: 1px solid var(--color-line-faint);
 }
 
-.library-folders {
-  min-width: 0;
+/* Collections: one quiet line each, the count on the right. */
+.library-collections {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--color-line);
-  padding-right: 14px;
+  gap: 1px;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-line-faint);
+  padding: var(--space-2);
 }
 
-.library-folders-title {
+.library-collection {
+  min-height: 34px;
   flex: 0 0 auto;
-  margin: 4px 0 8px;
-  color: var(--color-muted);
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.library-folders .collection-list {
-  min-height: 0;
-  flex: 1;
-  padding: 0 4px 8px 0;
-}
-
-.library-collection-item {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
+  padding-right: var(--space-1);
   transition: var(--transition-colors);
 }
 
-.library-collection-item:hover {
-  background: var(--color-accent-faint);
+.library-collection:hover {
+  background: var(--color-overlay-2);
 }
 
-.library-collection-item.is-active {
-  border-color: var(--color-accent-line);
+.library-collection.is-active {
   background: var(--color-accent-subtle);
 }
 
-.collection-row {
-  width: auto;
+.library-collection.is-skeleton {
+  padding-left: var(--space-2-5);
+}
+
+.library-collection.is-skeleton:hover {
+  background: none;
+}
+
+.library-collection-button {
   min-width: 0;
-  min-height: 56px;
+  min-height: 34px;
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: var(--space-2);
   border: 0;
-  border-radius: 0;
+  border-radius: inherit;
   background: transparent;
-  color: var(--color-text);
-  padding: 10px 8px;
+  color: var(--color-text-secondary);
+  padding: 0 var(--space-1) 0 var(--space-2-5);
+  font: inherit;
+  font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
 }
 
-.library-collection-actions {
-  position: relative;
-  flex: 0 0 auto;
+.library-collection.is-active .library-collection-button {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
 }
 
-.library-collection-menu-trigger {
-  margin-right: 8px;
-}
-
-.collection-row>span:nth-child(2) {
+.library-collection-name {
   min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.collection-row strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
 }
 
-.collection-row small {
+.library-collection-button small {
+  flex: 0 0 auto;
+  color: var(--color-text-placeholder);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The collection's menu stays out of the way until its row is hovered, focused or open. */
+.library-collection-menu {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.library-collection:hover .library-collection-menu,
+.library-collection:focus-within .library-collection-menu,
+.library-collection-menu[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.library-collections-empty {
+  margin: var(--space-2) var(--space-2-5);
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--font-size-xs);
 }
 
-.collection-mark {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--color-accent-subtle);
-  color: var(--color-accent-light);
+.library-products {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
 .library-grid {
-  min-height: 0;
-  flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
   align-content: start;
-}
-
-.library-folder-content {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.library-folder-heading {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--color-line);
-  margin-bottom: 12px;
-  padding: 0 2px 10px;
-  color: var(--color-accent-light);
-}
-
-.library-folder-heading>span {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.library-folder-heading strong {
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.library-folder-heading small {
-  color: var(--color-muted);
-  font-size: var(--font-size-xs);
+  gap: var(--space-2);
 }
 
 .library-product-card {
   position: relative;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
+/* A laminate: its image and name, no frame of its own. Hover and selection add the surface. */
 .library-product {
   width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  background: var(--color-overlay-1);
-  color: var(--color-text);
-  padding: 10px;
+  gap: var(--space-1-5);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: var(--space-1-5);
   text-align: left;
   cursor: pointer;
-  transition: var(--transition-colors), transform var(--duration-fast) var(--ease-standard);
+  transition: var(--transition-colors);
+}
+
+.library-product:hover {
+  background: var(--color-overlay-2);
+}
+
+/* Selected: accent tint and outline plus a check badge, never color alone. */
+.library-product.is-selected {
+  background: var(--color-accent-subtle);
+  box-shadow: 0 0 0 1.5px var(--color-accent-light);
+  color: var(--color-text);
 }
 
 .library-product:disabled {
@@ -1121,85 +1119,202 @@
   opacity: 0.65;
 }
 
-.library-product:hover {
-  border-color: var(--color-accent-line-strong);
-  box-shadow: var(--shadow-card-hover);
-}
-
-.library-product.is-selected {
-  border-color: var(--color-accent-line-strong);
-  box-shadow: 0 0 0 1px var(--color-accent-line);
-}
-
-.library-product img,
-.product-placeholder {
-  width: 100%;
+.library-product-media {
+  position: relative;
   aspect-ratio: 1.15;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--color-overlay-2);
-}
-
-.library-product-name {
-  overflow-wrap: anywhere;
-  color: var(--color-text);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.library-product-delete {
-  position: absolute;
-  z-index: 1;
-  top: 17px;
-  right: 17px;
-  box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(6px);
-}
-
-.library-footer-status {
-  margin-right: auto;
-  color: var(--color-muted);
-  font-size: var(--font-size-sm);
-}
-
-.product-placeholder {
   display: grid;
   place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-overlay-2);
   color: var(--color-accent-muted);
 }
 
-/* Library placeholders: the card and row frames themselves, with shapes the size of their contents. */
-.library-product.is-skeleton,
-.collection-row.is-skeleton {
+.library-product-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library-product-check {
+  position: absolute;
+  bottom: var(--space-1-5);
+  right: var(--space-1-5);
+}
+
+.library-product-name {
+  overflow: hidden;
+  padding: 0 var(--space-0-5);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Deleting is rare here: the action appears on hover or focus, and is always there on touch. */
+.library-product-delete {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-2-5);
+  right: var(--space-2-5);
+  background: var(--color-panel-strong);
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.library-product-card:hover .library-product-delete,
+.library-product-card:focus-within .library-product-delete {
+  opacity: 1;
+}
+
+.library-footer-status {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Laminates that are still loading: the tile's frame with shapes the size of its image and name. */
+.library-product.is-skeleton {
   cursor: default;
 }
 
 .library-product.is-skeleton:hover {
-  border-color: var(--color-line);
-  box-shadow: none;
+  background: transparent;
 }
 
-.library-skeleton-image {
-  width: 100%;
+.library-skeleton-media {
   aspect-ratio: 1.15;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
-.library-skeleton-mark {
-  border-radius: 8px;
+.library-skeleton-name {
+  width: 64%;
+  height: 9px;
+  margin: 3px var(--space-0-5) 4px;
 }
 
-.library-skeleton-title {
-  margin: 8px 0 12px;
+@media (hover: none) {
+  .library-collection-menu,
+  .library-product-delete {
+    opacity: 1;
+  }
 }
 
-.collection-row.is-skeleton > span:nth-child(2) {
-  gap: 8px;
+/* Phones: collections become a scrolling row of chips above the laminates. */
+@media (max-width: 700px) {
+  .library-toolbar {
+    padding-inline: var(--space-4);
+  }
+
+  .library-message {
+    margin-inline: var(--space-4);
+  }
+
+  .library-browser {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .library-collections {
+    flex-direction: row;
+    gap: var(--space-1-5);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-line-faint);
+    padding: var(--space-2) var(--space-4);
+    scrollbar-width: none;
+  }
+
+  .library-collections::-webkit-scrollbar {
+    display: none;
+  }
+
+  .library-collection {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-full);
+  }
+
+  .library-collection.is-active {
+    border-color: var(--color-accent-line);
+  }
+
+  .library-collection-button {
+    padding-inline: var(--space-3) var(--space-1-5);
+  }
+
+  /* Only the open collection shows its menu, so the chips stay short. */
+  .library-collection:not(.is-active) .library-collection-menu {
+    display: none;
+  }
+
+  .library-collection:not(.is-active) {
+    padding-right: var(--space-1-5);
+  }
+
+  .library-products {
+    padding: var(--space-3);
+  }
+
+  .library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  }
 }
 
-.library-message {
-  margin: var(--space-3) var(--space-5) 0;
+@media (pointer: coarse) {
+  .library-collection,
+  .library-collection-button {
+    min-height: 40px;
+  }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 .library-dialog :focus-visible,
 .overview-expanded :focus-visible,
@@ -1210,71 +1325,18 @@
 }
 
 @media (max-width: 700px) {
-  .library-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
-    padding: 14px 16px;
-  }
 
-  .library-search {
-    width: 100%;
-    flex: none;
-  }
 
-  .library-body {
-    min-height: 0;
-    padding: 14px;
-  }
 
-  .library-browser {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 132px) minmax(0, 1fr);
-    gap: 12px;
-  }
 
-  .library-folders {
-    border-right: 0;
-    border-bottom: 1px solid var(--color-line);
-    padding: 0 0 8px;
-  }
 
-  .library-folders-title {
-    margin: 0 0 5px;
-  }
 
-  .library-folders .collection-list {
-    display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 0 0 5px;
-  }
 
-  .library-folders .library-collection-item {
-    width: 204px;
-    min-width: 204px;
-    flex: 0 0 204px;
-  }
 
-  .library-folders .collection-row {
-    width: auto;
-    min-width: 0;
-  }
 
-  .library-folder-content {
-    overflow: hidden;
-  }
 
-  .collection-list,
-  .library-grid {
-    min-height: 0;
-    padding: 4px;
-  }
 
-  .library-grid {
-    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
-    gap: 10px;
-  }
+
 
   .dashboard-content {
     width: min(100% - 32px, 560px);
@@ -1389,36 +1451,6 @@
   .overview-stat:last-child {
     border-bottom: 0;
   }
-
-  .library-toolbar {
-    gap: 8px;
-    padding: 10px 12px;
-  }
-
-  .library-body {
-    padding: 8px;
-  }
-
-  .library-browser {
-    grid-template-rows: minmax(0, 112px) minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .library-folder-heading {
-    min-height: 30px;
-    margin-bottom: 8px;
-    padding-bottom: 7px;
-  }
-
-  .library-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .library-product {
-    padding: 8px;
-  }
-
 }
 
 /* Touch: comfortable targets instead of the compact desktop sizes. */
@@ -1426,10 +1458,6 @@
   .composer-toolbar .app-button {
     --app-button-height: var(--control-height-md);
     --app-button-font-size: var(--font-size-sm);
-  }
-
-  .collection-row {
-    min-height: var(--control-height-touch);
   }
 }
 

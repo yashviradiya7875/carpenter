@@ -137,6 +137,28 @@ button {
   transition: none !important;
 }
 
+/*
+ * Selection check: a small accent disc with a check, for selected tiles and cards, so a
+ * selection never relies on color alone. The tile positions it.
+ */
+.app-check-badge {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-on-accent);
+  animation: app-pop-in var(--duration-fast) var(--ease-out) backwards;
+}
+
+.app-check-badge .app-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+
 /* Enter utilities for feature markup */
 .app-enter {
   animation: app-content-in var(--duration-base) var(--ease-out) backwards;

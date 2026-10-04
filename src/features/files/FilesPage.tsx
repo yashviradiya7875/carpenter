@@ -23,7 +23,7 @@ import { Mark } from '../../shared/components/Mark'
 import { FileRow, FileRowSkeleton } from './components/FileRow'
 import { FilesSidebar, type FilesNavItem, type FilesSection } from './components/FilesSidebar'
 import { DriveFolderTree } from './components/FolderTree'
-import { canEdit, canManage, isShared } from './filesPermissions'
+import { accessLabel, canEdit, canManage, isShared } from './filesPermissions'
 import {
   asShareDraft,
   createDriveFolder,
@@ -690,7 +690,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
         name={folder.name}
         kind="folder"
         updatedAt={folder.updatedAt}
-        meta={role ?? 'Access'}
+        meta={accessLabel(role)}
         isFavorite={folder.isFavorite}
         isBusy={busyId === folder.id}
         onOpen={() => (section === 'files' ? openFolder(folder) : navigateToFolderFromTree(folder.id))}
@@ -741,9 +741,9 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
         kind="file"
         imageUrl={file.thumbUrl ?? file.imageUrl}
         // Outside My Files, say which folder the file is in.
-        detail={section === 'files' ? file.tool : file.parentId ? `In ${folderNames.get(file.parentId) ?? 'a folder'}` : 'In My Files'}
+        detail={section === 'files' ? undefined : file.parentId ? `In ${folderNames.get(file.parentId) ?? 'a folder'}` : 'In My Files'}
         updatedAt={file.updatedAt ?? file.createdAt}
-        meta={role ?? 'Access'}
+        meta={accessLabel(role)}
         isFavorite={file.isFavorite}
         isBusy={busyId === file.id}
         onOpen={openImage(file.imageUrl)}
