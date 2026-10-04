@@ -24,18 +24,5 @@ export type PlacementPlan = {
   accentRegions: AccentRegion[]
 }
 
-export type Collection = { id: string; name: string; productCount?: number }
-export type Product = {
-  id: string
-  name: string
-  thumbUrl?: string
-  coverThumbUrl?: string
-  imageUrl?: string
-}
-export type ProductDetails = {
-  product?: {
-    id: string
-    name: string
-    images?: Array<{ id: string; url?: string; thumbUrl?: string }>
-  }
-}
+// The laminate library's types are shared with Files.
+export type { Collection, Product, ProductDetails } from '../../shared/catalog/catalogTypes'

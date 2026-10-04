@@ -1,70 +1,68 @@
+import type { ReactNode } from 'react'
 import { Mark } from '../../../shared/components/Mark'
-import { Button, Menu, MenuItem, MenuSeparator } from '../../../shared/ui'
-import { canEdit } from '../filesPermissions'
-import type { DriveResourceType } from '../filesService'
+import { Button, Menu, type IconName } from '../../../shared/ui'
 import { formatDate } from '../filesUtils'
 
 export type FileRowProps = {
   name: string
-  kind: DriveResourceType
-  updatedAt?: string
-  role?: string
-  isFavorite: boolean
+  /** Folders (and collections) open in place; files open their image. */
+  kind: 'file' | 'folder'
+  /** Icon shown when there is no image; defaults to the kind's. */
+  icon?: IconName
   imageUrl?: string
+  /** Small line under the name. */
   detail?: string
-  isBusy: boolean
-  onOpen: () => void
-  onFavorite: () => void
-  onRename: () => void
-  onMove: () => void
-  onShare: () => void
-  onDelete?: () => void
-  canManage: boolean
+  updatedAt?: string
+  /** Third column in list view, e.g. the user's access or a view count. */
+  meta?: string
+  isBusy?: boolean
+  /** Left out when the item has nothing to open. */
+  onOpen?: () => void
+  /** Adds the favorite star. */
+  onFavorite?: () => void
+  isFavorite?: boolean
+  /** `MenuItem`s for the row's actions menu; no menu when left out. */
+  menu?: ReactNode
 }
 
-export function FileRow({ name, kind, updatedAt, role, isFavorite, imageUrl, detail, isBusy, onOpen, onFavorite, onRename, onMove, onShare, onDelete, canManage: canShare }: FileRowProps) {
-  const mayEdit = canEdit(role)
+/** One item in a Files list: a folder, file, collection, laminate or link, with its actions. */
+export function FileRow({ name, kind, icon, imageUrl, detail, updatedAt, meta, isBusy = false, onOpen, onFavorite, isFavorite = false, menu }: FileRowProps) {
   return (
     <article className="files-row">
-      <button className="files-item-name" type="button" onClick={onOpen} disabled={kind === 'file' && !imageUrl}>
-        {imageUrl ? <img className="files-thumbnail" src={imageUrl} alt="" /> : <span className={`files-item-icon ${kind}`}><Mark name={kind === 'folder' ? 'folder' : 'image'} /></span>}
+      <button className="files-item-name" type="button" onClick={onOpen} disabled={!onOpen}>
+        {imageUrl
+          ? <img className="files-thumbnail" src={imageUrl} alt="" loading="lazy" />
+          : <span className={`files-item-icon ${kind}`}><Mark name={icon ?? (kind === 'folder' ? 'folder' : 'image')} /></span>}
         <span><strong>{name}</strong>{detail ? <small>{detail}</small> : null}</span>
       </button>
       <span className="files-updated">{formatDate(updatedAt) || '—'}</span>
-      <span className="files-role">{role ?? 'Access'}</span>
-      <div className="files-row-actions">
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          icon="star"
-          className={`favorite-button ${isFavorite ? 'is-favorite' : ''}`}
-          onClick={onFavorite}
-          aria-label={isFavorite ? `Remove ${name} from favorites` : `Add ${name} to favorites`}
-          loading={isBusy}
-        />
-        {mayEdit || canShare ? (
-          <Menu
-            trigger={(props) => (
-              <Button {...props} variant="ghost" size="sm" iconOnly icon="more" className="files-row-menu-trigger" aria-label={`Actions for ${name}`} />
-            )}
-          >
-            {mayEdit ? (
-              <>
-                <MenuItem onSelect={onRename}>Rename</MenuItem>
-                <MenuItem onSelect={onMove}>Move</MenuItem>
-              </>
-            ) : null}
-            {canShare ? <MenuItem onSelect={onShare}>Sharing</MenuItem> : null}
-            {kind === 'folder' && canShare && onDelete ? (
-              <>
-                <MenuSeparator />
-                <MenuItem tone="danger" icon="trash" onSelect={onDelete}>Delete folder</MenuItem>
-              </>
-            ) : null}
-          </Menu>
-        ) : null}
-      </div>
+      <span className="files-role">{meta ?? ''}</span>
+      {/* Left out entirely when the row has no actions, so the grid views don't show an empty box. */}
+      {onFavorite || menu ? (
+        <div className="files-row-actions">
+          {onFavorite ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon="star"
+              className={`favorite-button ${isFavorite ? 'is-favorite' : ''}`}
+              onClick={onFavorite}
+              aria-label={isFavorite ? `Remove ${name} from favorites` : `Add ${name} to favorites`}
+              loading={isBusy}
+            />
+          ) : null}
+          {menu ? (
+            <Menu
+              trigger={(props) => (
+                <Button {...props} variant="ghost" size="sm" iconOnly icon="more" className="files-row-menu-trigger" aria-label={`Actions for ${name}`} loading={isBusy && !onFavorite} />
+              )}
+            >
+              {menu}
+            </Menu>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   )
 }

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { Slide, toast, ToastContainer } from 'react-toastify'
 import type { AuthAccount } from '../../shared/auth/types'
+import { createLaminateCollection, deleteCollection, deleteProduct, uploadLaminateProducts } from '../../shared/catalog/catalogService'
+import type { Collection, Product } from '../../shared/catalog/catalogTypes'
 import {
   Alert,
   Button,
@@ -9,15 +11,17 @@ import {
   EmptyState,
   Field,
   LoadingState,
+  MenuItem,
+  MenuSeparator,
   Select,
   TextInput,
   useTheme,
 } from '../../shared/ui'
 import { Mark } from '../../shared/components/Mark'
 import { FileRow } from './components/FileRow'
+import { FilesSidebar, type FilesNavItem, type FilesSection } from './components/FilesSidebar'
 import { DriveFolderTree } from './components/FolderTree'
-import { UploadImagesRow } from './components/UploadImagesRow'
-import { canEdit, canManage } from './filesPermissions'
+import { canEdit, canManage, isShared } from './filesPermissions'
 import {
   asShareDraft,
   createDriveFolder,
@@ -27,22 +31,26 @@ import {
   getDriveResourceShares,
   getString,
   listDriveContents,
-  loadDriveFolderTree,
+  listRenderLinks,
+  loadDriveIndex,
   moveDriveFile,
   moveDriveFolder,
   renameDriveResource,
   revokeDriveShareLink,
+  setRenderLinkRevoked,
   shareDriveResource,
   shareLinkToken,
   toggleDriveFavorite,
-  uploadDriveImage,
+  type DriveContents,
   type DriveFile,
   type DriveFolder,
   type DriveResourceType,
   type DriveRole,
+  type RenderLink,
   type ShareDraft,
 } from './filesService'
 import { errorMessage, formatDate, isDescendant, isImageFile } from './filesUtils'
+import { useLibrary } from './useLibrary'
 import 'react-toastify/dist/ReactToastify.css'
 import './FilesPage.css'
 
@@ -65,31 +73,75 @@ type MoveTarget = {
   currentParentId: string | null
 }
 
+type LibraryDeleteTarget = { kind: 'collection'; item: Collection } | { kind: 'product'; item: Product }
+
 type FilesViewMode = 'large' | 'small' | 'list'
+
+/** How many of the newest files Recent shows. */
+const RECENT_LIMIT = 30
+
+/**
+ * The sections of Files. My Files is the folder view; All Assets, Recent, Favorites, Shared,
+ * Renders and Sources are different cuts of the same files; Library is the laminate
+ * collections (the one place images are uploaded); Links are public render links.
+ */
+const SECTIONS: FilesNavItem[] = [
+  { id: 'files', label: 'My Files', icon: 'folder' },
+  { id: 'assets', label: 'All Assets', icon: 'layers' },
+  { id: 'recent', label: 'Recent', icon: 'clock' },
+  { id: 'favorites', label: 'Favorites', icon: 'star' },
+  { id: 'shared', label: 'Shared', icon: 'share' },
+  { id: 'library', label: 'Library', icon: 'gridLarge', divided: true },
+  { id: 'renders', label: 'Renders', icon: 'spark', divided: true },
+  { id: 'sources', label: 'Sources', icon: 'image' },
+  { id: 'links', label: 'Links', icon: 'link' },
+]
+
+const EMPTY_COPY: Record<Exclude<FilesSection, 'files' | 'library'>, { title: string; description: string }> = {
+  assets: { title: 'No assets yet', description: 'Renders you save to Files appear here, whichever folder they are in.' },
+  recent: { title: 'Nothing recent', description: 'Your latest files appear here.' },
+  favorites: { title: 'No favorites yet', description: 'Favorite a file or folder to find it here.' },
+  shared: { title: 'Nothing shared', description: 'Files and folders shared with you, or that you share with your organization, appear here.' },
+  renders: { title: 'No renders yet', description: 'Generate a render in the studio and save it to Files to see it here.' },
+  sources: { title: 'No sources yet', description: 'The laminate textures your saved renders were made from appear here.' },
+  links: { title: 'No render links yet', description: 'Public links to your renders appear here once they are created.' },
+}
+
+function fileTime(file: DriveFile): number {
+  return Date.parse(file.updatedAt ?? file.createdAt ?? '') || 0
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
 
 export function FilesPage({ account, onBack }: FilesPageProps) {
   const { theme } = useTheme()
+  const [section, setSection] = useState<FilesSection>('files')
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [folderPath, setFolderPath] = useState<DriveFolder[]>([])
   const [folders, setFolders] = useState<DriveFolder[]>([])
-  const [folderTree, setFolderTree] = useState<DriveFolder[]>([])
+  // Every folder and file in the user's Files: the folder tree, and the sections that cut across folders.
+  const [driveIndex, setDriveIndex] = useState<DriveContents>({ folders: [], files: [] })
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(() => new Set())
   const [files, setFiles] = useState<DriveFile[]>([])
+  const [links, setLinks] = useState<RenderLink[] | null>(null)
   const [viewMode, setViewMode] = useState<FilesViewMode>('list')
   const [search, setSearch] = useState('')
-  const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingTree, setIsLoadingTree] = useState(true)
+  const [isLoadingIndex, setIsLoadingIndex] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false)
-  const [folderName, setFolderName] = useState('')
-  const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [createTarget, setCreateTarget] = useState<'folder' | 'collection' | null>(null)
+  const [newName, setNewName] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
   const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null)
   const [moveFolders, setMoveFolders] = useState<DriveFolder[]>([])
   const [moveDestination, setMoveDestination] = useState('')
   const [isLoadingMoveFolders, setIsLoadingMoveFolders] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DriveFolder | null>(null)
   const [deleteFiles, setDeleteFiles] = useState(false)
+  const [libraryDeleteTarget, setLibraryDeleteTarget] = useState<LibraryDeleteTarget | null>(null)
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null)
   const [shareDraft, setShareDraft] = useState<ShareDraft>({ visibility: 'private', permissions: {} })
   const [shareUsername, setShareUsername] = useState('')
@@ -105,27 +157,42 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
   const [isLoadingActivity, setIsLoadingActivity] = useState(false)
   const [isDragActive, setIsDragActive] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({ completed: 0, total: 0 })
   const uploadInput = useRef<HTMLInputElement>(null)
 
   const currentFolder = folderPath.at(-1) ?? null
   const currentFolderId = currentFolder?.id ?? null
-  const hasFilesAccess = account.capabilities?.filesAccess !== undefined
-    && account.capabilities.filesAccess !== 'none'
+  const folderTree = driveIndex.folders
+  const capabilities = account.capabilities
+  const hasFilesAccess = capabilities?.filesAccess !== undefined && capabilities.filesAccess !== 'none'
   // The API allows managing folders and files for `full` and `unrestricted`; `laminates` is view-only.
-  const filesAccess = account.capabilities?.filesAccess
-  const hasFullFilesAccess = filesAccess === 'full' || filesAccess === 'unrestricted'
+  const hasFullFilesAccess = capabilities?.filesAccess === 'full' || capabilities?.filesAccess === 'unrestricted'
   const isViewOnlyAccount = hasFilesAccess && !hasFullFilesAccess
-  const canCreateHere = hasFullFilesAccess && (!currentFolder || canEdit(currentFolder.myRole))
-  const canUploadHere = canCreateHere && account.capabilities?.canSaveToFiles === true
+  // Folders are created in the open folder in My Files, and at Home from the other sections.
+  const canCreateFolder = hasFullFilesAccess && (section !== 'files' || !currentFolder || canEdit(currentFolder.myRole))
+  // The library follows the same capabilities as in the studio: who may see it, and who may add to it.
+  const canBrowseLibrary = Boolean(capabilities?.laminateSource && capabilities.laminateSource !== 'none')
+  const canManageLibrary = capabilities?.canUploadLaminate === true
 
+  const isDriveSection = section !== 'library' && section !== 'links'
+  const searchTerm = search.trim()
+
+  const library = useLibrary(
+    account.username,
+    hasFilesAccess && canBrowseLibrary && section === 'library',
+    searchTerm,
+    (error) => toast.error(errorMessage(error)),
+  )
+  const openCollection = library.openCollection
+  const canUploadHere = section === 'library' && canManageLibrary && openCollection !== null
+
+  // My Files: the open folder, or a search across folders.
   useEffect(() => {
-    if (!hasFilesAccess) return
+    if (!hasFilesAccess || section !== 'files') return
 
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setIsLoading(true)
-      listDriveContents(account.username, currentFolderId, search.trim(), favoritesOnly, { signal: controller.signal })
+      listDriveContents(account.username, currentFolderId, searchTerm, false, { signal: controller.signal })
         .then((contents) => {
           setFolders(contents.folders)
           setFiles(contents.files)
@@ -136,33 +203,58 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
         .finally(() => {
           if (!controller.signal.aborted) setIsLoading(false)
         })
-    }, search ? 220 : 0)
+    }, searchTerm ? 220 : 0)
 
     return () => {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [account.username, currentFolderId, favoritesOnly, hasFilesAccess, reloadKey, search])
+  }, [account.username, currentFolderId, hasFilesAccess, reloadKey, searchTerm, section])
 
   useEffect(() => {
     if (!hasFilesAccess) return
     const controller = new AbortController()
-    loadDriveFolderTree(account.username, { signal: controller.signal })
-      .then(setFolderTree)
+    loadDriveIndex(account.username, { signal: controller.signal })
+      .then(setDriveIndex)
       .catch((requestError: unknown) => {
         if (!controller.signal.aborted) toast.error(errorMessage(requestError))
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingTree(false)
+        if (!controller.signal.aborted) setIsLoadingIndex(false)
       })
     return () => controller.abort()
   }, [account.username, hasFilesAccess, reloadKey])
 
   useEffect(() => {
-    document.title = `${currentFolder ? `${currentFolder.name} · ` : ''}Files · Carpenter Pro`
-  }, [currentFolder])
+    if (!hasFilesAccess || section !== 'links') return
+    const controller = new AbortController()
+    listRenderLinks(account.username, { signal: controller.signal })
+      .then(setLinks)
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return
+        setLinks([])
+        toast.error(errorMessage(requestError))
+      })
+    return () => controller.abort()
+  }, [account.username, hasFilesAccess, reloadKey, section])
 
-  const refresh = () => setReloadKey((value) => value + 1)
+  const sectionLabel = SECTIONS.find((item) => item.id === section)?.label ?? 'Files'
+  const locationLabel = section === 'files' ? currentFolder?.name : section === 'library' ? openCollection?.name : undefined
+
+  useEffect(() => {
+    document.title = `${locationLabel ?? sectionLabel} · Files · Carpenter Pro`
+  }, [locationLabel, sectionLabel])
+
+  const refresh = () => {
+    setReloadKey((value) => value + 1)
+    if (section === 'library') library.reload()
+  }
+
+  const selectSection = (next: FilesSection) => {
+    setSection(next)
+    setSearch('')
+    setIsDragActive(false)
+  }
 
   const openFolder = (folder: DriveFolder) => {
     setFolderPath((current) => {
@@ -172,7 +264,6 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
       return [folder]
     })
     setSearch('')
-    setFavoritesOnly(false)
   }
 
   const navigateToFolder = (folderId: string | null) => {
@@ -189,9 +280,9 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
       setFolderPath(nextPath)
     }
     setSearch('')
-    setFavoritesOnly(false)
   }
 
+  // From the tree, or from a folder listed in another section: open it in My Files.
   const navigateToFolderFromTree = (folderId: string) => {
     const foldersById = new Map(folderTree.map((folder) => [folder.id, folder]))
     const ancestors: string[] = []
@@ -201,6 +292,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
       folder = foldersById.get(folder.parentId)
     }
     setExpandedFolderIds((current) => new Set([...current, ...ancestors]))
+    setSection('files')
     navigateToFolder(folderId)
   }
 
@@ -213,52 +305,37 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     })
   }
 
-  const uploadImages = async (incomingFiles: File[]) => {
+  // Images are uploaded only into a Library collection, where each becomes a laminate.
+  const uploadToLibrary = async (incomingFiles: File[]) => {
+    if (!canUploadHere || !openCollection) {
+      toast.warning('Open a collection in the Library to upload images.')
+      return
+    }
     const images = incomingFiles.filter(isImageFile)
     if (!images.length) {
       toast.warning('Choose image files to upload.')
-      return
-    }
-    if (!canUploadHere) {
-      toast.warning('You need editor access and save-to-Files permission to upload images here.')
       return
     }
     const skippedCount = incomingFiles.length - images.length
     if (skippedCount) toast.warning(`${skippedCount} non-image file${skippedCount === 1 ? ' was' : 's were'} skipped.`)
 
     setIsUploading(true)
-    setUploadProgress({ completed: 0, total: images.length })
-    setSearch('')
-    setFavoritesOnly(false)
-    let uploaded = 0
-    const failedFiles: string[] = []
-
-    for (const file of images) {
-      try {
-        await uploadDriveImage(account.username, file, currentFolderId)
-        uploaded += 1
-      } catch (uploadError) {
-        failedFiles.push(`${file.name}: ${errorMessage(uploadError)}`)
-      }
-      setUploadProgress({ completed: uploaded + failedFiles.length, total: images.length })
+    try {
+      const result = await uploadLaminateProducts(account.username, openCollection.id, images)
+      const added = result.productsCreated ?? result.products?.length ?? images.length
+      toast.success(`${plural(added, 'laminate')} added to ${openCollection.name}.`)
+      library.reload()
+    } catch (uploadError) {
+      toast.error(errorMessage(uploadError))
+    } finally {
+      setIsUploading(false)
     }
-
-    if (uploaded || failedFiles.length) refresh()
-    if (uploaded) {
-      toast.success(`${uploaded} image${uploaded === 1 ? '' : 's'} uploaded to ${currentFolder?.name ?? 'Home'}.`)
-    }
-    if (failedFiles.length) {
-      const message = failedFiles.length === 1 ? failedFiles[0] : `${failedFiles.length} images could not be uploaded.`
-      if (uploaded) toast.warning(message)
-      else toast.error(message)
-    }
-    setIsUploading(false)
   }
 
   const handleUploadSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ''
-    void uploadImages(selectedFiles)
+    void uploadToLibrary(selectedFiles)
   }
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
@@ -281,15 +358,15 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     if (!event.dataTransfer.files.length) return
     event.preventDefault()
     setIsDragActive(false)
-    void uploadImages(Array.from(event.dataTransfer.files))
+    if (canUploadHere) void uploadToLibrary(Array.from(event.dataTransfer.files))
   }
 
-  const runMutation = async (id: string, action: () => Promise<unknown>, successMessage: string) => {
+  const runMutation = async (id: string, action: () => Promise<unknown>, successMessage: string, afterSuccess: () => void = refresh) => {
     setBusyId(id)
     try {
       await action()
       toast.success(successMessage)
-      refresh()
+      afterSuccess()
     } catch (requestError) {
       toast.error(errorMessage(requestError))
     } finally {
@@ -297,29 +374,45 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     }
   }
 
-  const createFolder = async (event: FormEvent<HTMLFormElement>) => {
+  const openCreateDialog = (target: 'folder' | 'collection') => {
+    setNewName('')
+    setCreateTarget(target)
+  }
+
+  const createItem = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const name = folderName.trim()
-    if (!name) return
-    setIsCreatingFolder(true)
+    const name = newName.trim()
+    if (!name || !createTarget) return
+    setIsCreating(true)
     try {
-      await createDriveFolder(account.username, name, currentFolderId)
-      setFolderName('')
-      setIsCreateFolderOpen(false)
-      toast.success(`Folder “${name}” created.`)
-      refresh()
+      if (createTarget === 'collection') {
+        await createLaminateCollection(account.username, name)
+        toast.success(`Collection “${name}” created.`)
+        library.reload()
+      } else {
+        await createDriveFolder(account.username, name, section === 'files' ? currentFolderId : null)
+        toast.success(`Folder “${name}” created.`)
+        // Created at Home from another section: go there to show it.
+        if (section !== 'files') {
+          setSection('files')
+          setFolderPath([])
+          setSearch('')
+        }
+        refresh()
+      }
+      setCreateTarget(null)
     } catch (requestError) {
       toast.error(errorMessage(requestError))
     } finally {
-      setIsCreatingFolder(false)
+      setIsCreating(false)
     }
   }
 
   const renameResource = async (resource: DriveFolder | DriveFile, resourceType: DriveResourceType) => {
-    const newName = window.prompt(`Rename ${resourceType}`, resource.name)?.trim()
-    if (!newName || newName === resource.name) return
+    const nextName = window.prompt(`Rename ${resourceType}`, resource.name)?.trim()
+    if (!nextName || nextName === resource.name) return
     await runMutation(resource.id, async () => {
-      const result = await renameDriveResource(account.username, resource.id, resourceType, newName)
+      const result = await renameDriveResource(account.username, resource.id, resourceType, nextName)
       if (!result.success) throw new Error('The resource could not be renamed.')
     }, `${resourceType === 'folder' ? 'Folder' : 'File'} renamed.`)
   }
@@ -336,7 +429,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     setMoveDestination(resource.parentId ?? '')
     setMoveTarget({ id: resource.id, name: resource.name, resourceType, currentParentId: resource.parentId })
     try {
-      setMoveFolders(await loadDriveFolderTree(account.username))
+      setMoveFolders((await loadDriveIndex(account.username)).folders)
     } catch (requestError) {
       toast.error(errorMessage(requestError))
       setMoveTarget(null)
@@ -376,6 +469,37 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     setDeleteFiles(false)
   }
 
+  const confirmLibraryDelete = async () => {
+    const target = libraryDeleteTarget
+    if (!target) return
+    await runMutation(
+      target.item.id,
+      () => (target.kind === 'collection'
+        ? deleteCollection(account.username, target.item.id)
+        : deleteProduct(account.username, target.item.id)),
+      `${target.item.name} deleted.`,
+      () => {
+        if (target.kind === 'collection' && openCollection?.id === target.item.id) library.open(null)
+        library.reload()
+      },
+    )
+    setLibraryDeleteTarget(null)
+  }
+
+  const copyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.info('Link copied.')
+    } catch {
+      toast.error('Unable to copy the link in this browser.')
+    }
+  }
+
+  const toggleRenderLink = (link: RenderLink) => runMutation(link.token, async () => {
+    const result = await setRenderLinkRevoked(account.username, link.token, !link.revoked)
+    if (!result.success) throw new Error('The link could not be updated.')
+  }, link.revoked ? 'Link enabled.' : 'Link disabled.')
+
   const openShareDialog = async (target: ShareTarget) => {
     setShareTarget(target)
     setShareDraft({ visibility: 'private', permissions: {} })
@@ -408,6 +532,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
       if (!result.success) throw new Error('Sharing settings could not be saved.')
       toast.success('Sharing settings saved.')
       setShareTarget(null)
+      refresh()
     } catch (requestError) {
       toast.error(errorMessage(requestError))
     } finally {
@@ -439,16 +564,6 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     }
   }
 
-  const copyShareLink = async () => {
-    if (!shareLinkTokenValue) return
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}/share/${encodeURIComponent(shareLinkTokenValue)}`)
-      toast.info('Share link copied.')
-    } catch {
-      toast.error('Unable to copy the share link in this browser.')
-    }
-  }
-
   const revokeShareLink = async () => {
     if (!shareLinkTokenValue) return
     setIsRevokingLink(true)
@@ -472,7 +587,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     setIsActivityOpen(true)
     setIsLoadingActivity(true)
     try {
-      const result = await getDriveActivity(account.username, currentFolderId)
+      const result = await getDriveActivity(account.username, section === 'files' ? currentFolderId : null)
       setActivity(Array.isArray(result.activity) ? result.activity : [])
     } catch (requestError) {
       toast.error(errorMessage(requestError))
@@ -500,176 +615,365 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
     )
   }
 
+  /* What the open section lists. My Files asks the API; the other Drive sections are cuts of the index. */
+
+  const matchesSearch = (name: string) => !searchTerm || name.toLowerCase().includes(searchTerm.toLowerCase())
+  const newestFirst = (items: DriveFile[]) => [...items].sort((a, b) => fileTime(b) - fileTime(a))
+  const favoriteFolders = folderTree.filter((folder) => folder.isFavorite)
+  const favoriteFiles = driveIndex.files.filter((file) => file.isFavorite)
+  const sharedFolders = folderTree.filter(isShared)
+  const sharedFiles = driveIndex.files.filter(isShared)
+  const renderFiles = driveIndex.files.filter((file) => !file.isUpload)
+  const sourceFiles = driveIndex.files.filter((file) => file.baseImageUrl)
+
+  let shownFolders: DriveFolder[] = []
+  let shownFiles: DriveFile[] = []
+  if (section === 'files') {
+    shownFolders = folders
+    shownFiles = files
+  } else if (isDriveSection) {
+    if (section === 'favorites') shownFolders = favoriteFolders
+    if (section === 'shared') shownFolders = sharedFolders
+    const sectionFiles = section === 'assets' ? driveIndex.files
+      : section === 'recent' ? newestFirst(driveIndex.files).slice(0, RECENT_LIMIT)
+        : section === 'favorites' ? favoriteFiles
+          : section === 'shared' ? sharedFiles
+            : section === 'renders' ? renderFiles
+              : sourceFiles
+    shownFolders = shownFolders.filter((folder) => matchesSearch(folder.name))
+    shownFiles = newestFirst(sectionFiles).filter((file) => matchesSearch(file.name))
+  }
+  const shownLinks = (links ?? []).filter((link) => matchesSearch(link.title))
+  const folderNames = new Map(folderTree.map((folder) => [folder.id, folder.name]))
+
+  const navItems = SECTIONS
+    .filter((item) => item.id !== 'library' || canBrowseLibrary)
+    .map((item) => (isLoadingIndex ? item : {
+      ...item,
+      count: item.id === 'assets' ? driveIndex.files.length
+        : item.id === 'favorites' ? favoriteFolders.length + favoriteFiles.length
+          : item.id === 'shared' ? sharedFolders.length + sharedFiles.length
+            : item.id === 'renders' ? renderFiles.length
+              : item.id === 'sources' ? sourceFiles.length
+                : undefined,
+    }))
+
+  const isListLoading = section === 'files' ? isLoading
+    : section === 'library' ? library.isLoading
+      : section === 'links' ? links === null
+        : isLoadingIndex
+  const itemCount = section === 'library' ? (openCollection ? library.products.length : library.collections.length)
+    : section === 'links' ? shownLinks.length
+      : shownFolders.length + shownFiles.length
+
+  const emptyCopy = searchTerm
+    ? { title: 'No matching items', description: 'Try another search.' }
+    : section === 'files'
+      ? { title: 'This folder is empty', description: canCreateFolder ? 'Create a folder, or save a render to Files to see it here.' : 'Renders you save to Files appear here.' }
+      : section === 'library'
+        ? openCollection
+          ? { title: 'This collection is empty', description: canManageLibrary ? 'Upload images to add laminates to it.' : 'Laminates added to this collection appear here.' }
+          : { title: 'No collections yet', description: canManageLibrary ? 'Create a collection, then upload laminate images into it.' : 'Collections shared with you appear here.' }
+        : EMPTY_COPY[section]
+
+  const openImage = (url?: string) => (url ? () => window.open(url, '_blank', 'noopener,noreferrer') : undefined)
+
+  const folderRow = (folder: DriveFolder) => {
+    const role = hasFullFilesAccess ? folder.myRole : 'viewer'
+    const mayEdit = canEdit(role)
+    const mayManage = hasFullFilesAccess && canManage(folder.myRole)
+    return (
+      <FileRow
+        key={`folder-${folder.id}`}
+        name={folder.name}
+        kind="folder"
+        updatedAt={folder.updatedAt}
+        meta={role ?? 'Access'}
+        isFavorite={folder.isFavorite}
+        isBusy={busyId === folder.id}
+        onOpen={() => (section === 'files' ? openFolder(folder) : navigateToFolderFromTree(folder.id))}
+        onFavorite={() => void toggleFavorite(folder, 'folder')}
+        menu={mayEdit || mayManage ? (
+          <>
+            {mayEdit ? (
+              <>
+                <MenuItem onSelect={() => void renameResource(folder, 'folder')}>Rename</MenuItem>
+                <MenuItem onSelect={() => void openMoveDialog(folder, 'folder')}>Move</MenuItem>
+              </>
+            ) : null}
+            {mayManage ? (
+              <>
+                <MenuItem onSelect={() => void openShareDialog({ id: folder.id, name: folder.name, resourceType: 'folder', myRole: folder.myRole })}>Sharing</MenuItem>
+                <MenuSeparator />
+                <MenuItem tone="danger" icon="trash" onSelect={() => { setDeleteTarget(folder); setDeleteFiles(false) }}>Delete folder</MenuItem>
+              </>
+            ) : null}
+          </>
+        ) : undefined}
+      />
+    )
+  }
+
+  const fileRow = (file: DriveFile) => {
+    // Sources lists the laminate a render was made from, not the render itself.
+    if (section === 'sources') {
+      return (
+        <FileRow
+          key={`source-${file.id}`}
+          name={file.name}
+          kind="file"
+          imageUrl={file.baseImageUrl}
+          detail="Source texture"
+          updatedAt={file.updatedAt ?? file.createdAt}
+          onOpen={openImage(file.baseImageUrl)}
+        />
+      )
+    }
+    const role = hasFullFilesAccess ? file.myRole : 'viewer'
+    const mayEdit = canEdit(role)
+    const mayManage = hasFullFilesAccess && canManage(file.myRole)
+    return (
+      <FileRow
+        key={`file-${file.id}`}
+        name={file.name}
+        kind="file"
+        imageUrl={file.thumbUrl ?? file.imageUrl}
+        // Outside My Files, say which folder the file is in.
+        detail={section === 'files' ? file.tool : file.parentId ? `In ${folderNames.get(file.parentId) ?? 'a folder'}` : 'In My Files'}
+        updatedAt={file.updatedAt ?? file.createdAt}
+        meta={role ?? 'Access'}
+        isFavorite={file.isFavorite}
+        isBusy={busyId === file.id}
+        onOpen={openImage(file.imageUrl)}
+        onFavorite={() => void toggleFavorite(file, 'file')}
+        menu={mayEdit || mayManage ? (
+          <>
+            {mayEdit ? (
+              <>
+                <MenuItem onSelect={() => void renameResource(file, 'file')}>Rename</MenuItem>
+                <MenuItem onSelect={() => void openMoveDialog(file, 'file')}>Move</MenuItem>
+              </>
+            ) : null}
+            {mayManage ? (
+              <MenuItem onSelect={() => void openShareDialog({ id: file.id, name: file.name, resourceType: 'file', myRole: file.myRole })}>Sharing</MenuItem>
+            ) : null}
+          </>
+        ) : undefined}
+      />
+    )
+  }
+
+  // Library: collections open like folders; inside one are its laminates.
+  const libraryRows = openCollection
+    ? library.products.map((product) => (
+      <FileRow
+        key={`product-${product.id}`}
+        name={product.name}
+        kind="file"
+        imageUrl={product.thumbUrl ?? product.coverThumbUrl ?? product.imageUrl}
+        detail="Laminate"
+        isBusy={busyId === product.id}
+        onOpen={openImage(product.imageUrl ?? product.thumbUrl ?? product.coverThumbUrl)}
+        menu={canManageLibrary ? (
+          <MenuItem tone="danger" icon="trash" onSelect={() => setLibraryDeleteTarget({ kind: 'product', item: product })}>Delete laminate</MenuItem>
+        ) : undefined}
+      />
+    ))
+    : library.collections.map((collection) => (
+      <FileRow
+        key={`collection-${collection.id}`}
+        name={collection.name}
+        kind="folder"
+        detail={typeof collection.productCount === 'number' ? plural(collection.productCount, 'laminate') : 'Collection'}
+        isBusy={busyId === collection.id}
+        onOpen={() => { setSearch(''); library.open(collection) }}
+        menu={canManageLibrary ? (
+          <MenuItem tone="danger" icon="trash" onSelect={() => setLibraryDeleteTarget({ kind: 'collection', item: collection })}>Delete collection</MenuItem>
+        ) : undefined}
+      />
+    ))
+
+  const linkRows = shownLinks.map((link) => (
+    <FileRow
+      key={`link-${link.token}`}
+      name={link.title}
+      kind="file"
+      icon="link"
+      detail={link.url}
+      updatedAt={link.createdAt}
+      meta={link.revoked ? 'Disabled' : plural(link.views, 'view')}
+      isBusy={busyId === link.token}
+      onOpen={link.revoked ? undefined : openImage(link.url)}
+      menu={(
+        <>
+          <MenuItem onSelect={() => void copyLink(link.url)}>Copy link</MenuItem>
+          <MenuSeparator />
+          <MenuItem tone={link.revoked ? undefined : 'danger'} onSelect={() => void toggleRenderLink(link)}>
+            {link.revoked ? 'Enable link' : 'Disable link'}
+          </MenuItem>
+        </>
+      )}
+    />
+  ))
+
+  const newFolderButton = isViewOnlyAccount ? null : (
+    <Button
+      variant="primary"
+      size="sm"
+      shape="pill"
+      icon="plus"
+      onClick={() => openCreateDialog('folder')}
+      disabled={!canCreateFolder}
+      title={!canCreateFolder ? 'You need editor access to create a folder here.' : undefined}
+    >
+      New folder
+    </Button>
+  )
+  const uploadButton = (
+    <Button variant="primary" size="sm" shape="pill" icon="upload" onClick={() => uploadInput.current?.click()} loading={isUploading} loadingLabel="Uploading…">
+      Upload images
+    </Button>
+  )
+  const primaryAction = section === 'library'
+    ? canManageLibrary
+      ? openCollection ? uploadButton : <Button variant="primary" size="sm" shape="pill" icon="plus" onClick={() => openCreateDialog('collection')}>New collection</Button>
+      : null
+    : section === 'links' ? null : newFolderButton
+
   return (
-    <main className="files-page app-enter-fade">
+    <main className="files-page files-workspace app-enter-fade">
       <ToastContainer position="bottom-right" autoClose={3500} newestOnTop closeOnClick pauseOnHover theme={theme} limit={4} transition={Slide} />
+      <h1 className="sr-only">Files</h1>
+
+      <FilesSidebar
+        items={navItems}
+        active={section}
+        onSelect={selectSection}
+        collapsed={isSidebarCollapsed}
+        onToggleCollapsed={() => setIsSidebarCollapsed((value) => !value)}
+      >
+        {section === 'files' ? (
+          <DriveFolderTree
+            folders={folderTree}
+            currentFolderId={currentFolderId}
+            activePath={folderPath.map((folder) => folder.id)}
+            expandedFolderIds={expandedFolderIds}
+            isLoading={isLoadingIndex}
+            onNavigate={navigateToFolderFromTree}
+            onToggle={toggleFolderTreeNode}
+          />
+        ) : null}
+      </FilesSidebar>
+
       <div
-        className={`files-content ${isDragActive ? 'is-drag-active' : ''}`}
+        className={`files-main ${isDragActive ? 'is-drag-active' : ''}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         <input ref={uploadInput} className="files-upload-input" type="file" accept="image/*" multiple onChange={handleUploadSelection} tabIndex={-1} />
-        {isDragActive ? <div className="files-drop-overlay" aria-hidden="true"><Mark name="upload" /><strong>Drop images to upload</strong><span>Images will be added to {currentFolder?.name ?? 'Home'}</span></div> : null}
-        <header className="files-heading">
-          <div>
-            <h1>Files</h1>
-            <p>Your saved renders and folders.</p>
+        {isDragActive ? (
+          <div className="files-drop-overlay" aria-hidden="true">
+            <Mark name="upload" /><strong>Drop images to upload</strong><span>They will be added to {openCollection?.name ?? 'this collection'}</span>
           </div>
-          <div className="files-heading-actions">
-            <Button variant="ghost" shape="pill" icon="back" onClick={onBack}>Studio</Button>
-            <Button shape="pill" icon="activity" onClick={() => void toggleActivity()} aria-expanded={isActivityOpen}>
-              Activity
-            </Button>
+        ) : null}
+
+        <header className="files-topbar">
+          <nav className="files-breadcrumbs" aria-label="Location">
+            <button
+              type="button"
+              onClick={() => (section === 'files' ? setFolderPath([]) : section === 'library' ? library.open(null) : undefined)}
+              aria-current={locationLabel ? undefined : 'page'}
+            >
+              <Mark name={SECTIONS.find((item) => item.id === section)?.icon ?? 'folder'} /> {sectionLabel}
+            </button>
+            {section === 'files' ? folderPath.map((folder, index) => (
+              <span className="files-breadcrumb-item" key={folder.id}>
+                <Mark name="arrow" />
+                <button type="button" onClick={() => setFolderPath((current) => current.slice(0, index + 1))} aria-current={index === folderPath.length - 1 ? 'page' : undefined}>
+                  <span>{folder.name}</span>
+                </button>
+              </span>
+            )) : null}
+            {section === 'library' && openCollection ? (
+              <span className="files-breadcrumb-item">
+                <Mark name="arrow" />
+                <button type="button" aria-current="page"><span>{openCollection.name}</span></button>
+              </span>
+            ) : null}
+          </nav>
+
+          <div className="files-toolbar">
+            <TextInput
+              className="files-search"
+              type="search"
+              size="sm"
+              startIcon="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${(locationLabel ?? sectionLabel).toLowerCase()}`}
+              aria-label={`Search ${locationLabel ?? sectionLabel}`}
+            />
+            <div className="files-view-switch" role="group" aria-label="View">
+              <button className={viewMode === 'large' ? 'is-active' : ''} type="button" aria-label="Large icon view" aria-pressed={viewMode === 'large'} title="Large icons" onClick={() => setViewMode('large')}>
+                <Mark name="gridLarge" />
+              </button>
+              <button className={viewMode === 'small' ? 'is-active' : ''} type="button" aria-label="Small icon view" aria-pressed={viewMode === 'small'} title="Small icons" onClick={() => setViewMode('small')}>
+                <Mark name="gridSmall" />
+              </button>
+              <button className={viewMode === 'list' ? 'is-active' : ''} type="button" aria-label="List view" aria-pressed={viewMode === 'list'} title="List" onClick={() => setViewMode('list')}>
+                <Mark name="listView" />
+              </button>
+            </div>
+            <div className="files-toolbar-actions">
+              <Button variant="ghost" size="sm" shape="pill" iconOnly icon="refresh" onClick={refresh} aria-label="Refresh" tooltip="Refresh" />
+              {isDriveSection ? (
+                <Button variant="ghost" size="sm" shape="pill" iconOnly icon="activity" onClick={() => void toggleActivity()} aria-label="Activity" aria-expanded={isActivityOpen} tooltip="Activity" />
+              ) : null}
+              <Button variant="ghost" size="sm" shape="pill" icon="back" onClick={onBack}>Studio</Button>
+              {primaryAction}
+            </div>
           </div>
         </header>
 
-        <nav className="files-breadcrumbs" aria-label="Folder path">
-          <button type="button" onClick={() => setFolderPath([])} aria-current={folderPath.length === 0 ? 'page' : undefined}>
-            <Mark name="home" /> Home
-          </button>
-          {folderPath.map((folder, index) => (
-            <span className="files-breadcrumb-item" key={folder.id}>
-              <Mark name="arrow" />
-              <button type="button" onClick={() => setFolderPath((current) => current.slice(0, index + 1))} aria-current={index === folderPath.length - 1 ? 'page' : undefined}>
-                <span>{folder.name}</span>
-              </button>
-            </span>
-          ))}
-        </nav>
-
-        <div className="files-toolbar">
-          <TextInput
-            className="files-search"
-            type="search"
-            startIcon="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search files and folders"
-            aria-label="Search files and folders"
-          />
-          <div className="files-view-switch" role="group" aria-label="Folder contents view">
-            <button className={viewMode === 'large' ? 'is-active' : ''} type="button" aria-label="Large icon view" aria-pressed={viewMode === 'large'} title="Large icons" onClick={() => setViewMode('large')}>
-              <Mark name="gridLarge" /><span>Large</span>
-            </button>
-            <button className={viewMode === 'small' ? 'is-active' : ''} type="button" aria-label="Small icon view" aria-pressed={viewMode === 'small'} title="Small icons" onClick={() => setViewMode('small')}>
-              <Mark name="gridSmall" /><span>Small</span>
-            </button>
-            <button className={viewMode === 'list' ? 'is-active' : ''} type="button" aria-label="List view" aria-pressed={viewMode === 'list'} title="List" onClick={() => setViewMode('list')}>
-              <Mark name="listView" /><span>List</span>
-            </button>
-          </div>
-          <div className="files-toolbar-actions">
-            <Button shape="pill" icon="star" aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly((value) => !value)}>
-              Favorites
-            </Button>
-            <Button shape="pill" iconOnly icon="refresh" onClick={refresh} aria-label="Refresh files" tooltip="Refresh" />
-            {account.capabilities?.canSaveToFiles ? (
-              <Button
-                shape="pill"
-                icon="upload"
-                onClick={() => uploadInput.current?.click()}
-                disabled={!canUploadHere}
-                loading={isUploading}
-                loadingLabel={`Uploading ${uploadProgress.completed}/${uploadProgress.total}`}
-                title={!canUploadHere ? 'You need editor access to upload into this folder.' : undefined}
-              >
-                Upload images
-              </Button>
-            ) : null}
-            {isViewOnlyAccount ? null : (
-              <Button variant="primary" shape="pill" icon="plus" onClick={() => { setFolderName(''); setIsCreateFolderOpen(true) }} disabled={!canCreateHere} title={!canCreateHere ? 'You need editor access to create a folder here.' : undefined}>
-                New folder
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {isViewOnlyAccount ? (
+        {isViewOnlyAccount && isDriveSection ? (
           <Alert tone="info" className="files-access-note">
-            This account can view its laminate files here. Creating folders, uploading, moving and sharing aren’t available for this account type.
+            This account can view its files here. Creating folders, moving and sharing aren’t available for this account type.
           </Alert>
         ) : null}
 
-        <div className={`files-layout ${isActivityOpen ? 'with-activity' : ''}`}>
-          <DriveFolderTree
-            folders={folderTree}
-            currentFolderId={currentFolderId}
-            activePath={folderPath.map((folder) => folder.id)}
-            expandedFolderIds={expandedFolderIds}
-            isLoading={isLoadingTree}
-            onNavigate={navigateToFolderFromTree}
-            onNavigateHome={() => navigateToFolder(null)}
-            onToggle={toggleFolderTreeNode}
-          />
-          <section className={`files-browser view-${viewMode}`} aria-label="Files and folders">
+        <div className={`files-workarea ${isActivityOpen && isDriveSection ? 'with-activity' : ''}`}>
+          <section className={`files-browser view-${viewMode}`} aria-label={locationLabel ?? sectionLabel}>
             <div className="files-list-heading">
-              <span>Name</span><span>Updated</span><span>Access</span><span className="sr-only">Actions</span>
+              <span>Name</span><span>Updated</span><span>{section === 'links' ? 'Views' : 'Access'}</span><span className="sr-only">Actions</span>
             </div>
-            {isLoading ? (
-              <LoadingState label="Loading files…" />
-            ) : folders.length || files.length ? (
-              <div className="files-list app-enter">
-                {folders.map((folder) => (
-                  <FileRow
-                    key={`folder-${folder.id}`}
-                    name={folder.name}
-                    kind="folder"
-                    updatedAt={folder.updatedAt}
-                    role={hasFullFilesAccess ? folder.myRole : 'viewer'}
-                    isFavorite={folder.isFavorite}
-                    isBusy={busyId === folder.id}
-                    onOpen={() => openFolder(folder)}
-                    onFavorite={() => void toggleFavorite(folder, 'folder')}
-                    onRename={() => void renameResource(folder, 'folder')}
-                    onMove={() => void openMoveDialog(folder, 'folder')}
-                    onShare={() => void openShareDialog({ id: folder.id, name: folder.name, resourceType: 'folder', myRole: folder.myRole })}
-                    onDelete={() => { setDeleteTarget(folder); setDeleteFiles(false) }}
-                    canManage={hasFullFilesAccess && canManage(folder.myRole)}
-                  />
-                ))}
-                {files.map((file) => (
-                  <FileRow
-                    key={`file-${file.id}`}
-                    name={file.name}
-                    kind="file"
-                    updatedAt={file.updatedAt ?? file.createdAt}
-                    role={hasFullFilesAccess ? file.myRole : 'viewer'}
-                    isFavorite={file.isFavorite}
-                    imageUrl={file.imageUrl}
-                    detail={file.tool}
-                    isBusy={busyId === file.id}
-                    onOpen={() => file.imageUrl && window.open(file.imageUrl, '_blank', 'noopener,noreferrer')}
-                    onFavorite={() => void toggleFavorite(file, 'file')}
-                    onRename={() => void renameResource(file, 'file')}
-                    onMove={() => void openMoveDialog(file, 'file')}
-                    onShare={() => void openShareDialog({ id: file.id, name: file.name, resourceType: 'file', myRole: file.myRole })}
-                    canManage={hasFullFilesAccess && canManage(file.myRole)}
-                  />
-                ))}
-                {canUploadHere && !search && !favoritesOnly ? <UploadImagesRow onClick={() => uploadInput.current?.click()} isUploading={isUploading} /> : null}
-              </div>
-            ) : (
-              <EmptyState
-                icon={search || favoritesOnly ? 'search' : 'folder'}
-                title={search ? 'No matching items' : favoritesOnly ? 'No favorites yet' : 'This folder is empty'}
-                description={search ? 'Try another search.' : favoritesOnly ? 'Favorite a file or folder to find it here.' : canUploadHere ? 'Upload images or generate a render to see it here.' : canCreateHere ? 'Create a folder or generate a render to see it here.' : 'Renders you generate appear here.'}
-                actions={search ? (
-                  <Button shape="pill" onClick={() => setSearch('')}>Clear search</Button>
-                ) : favoritesOnly ? (
-                  <Button shape="pill" onClick={() => setFavoritesOnly(false)}>Show all items</Button>
-                ) : canCreateHere ? (
-                  <>
-                    {canUploadHere ? <Button shape="pill" icon="upload" onClick={() => uploadInput.current?.click()} loading={isUploading}>Upload images</Button> : null}
-                    <Button variant="primary" shape="pill" icon="plus" onClick={() => setIsCreateFolderOpen(true)}>New folder</Button>
-                  </>
-                ) : undefined}
-              />
-            )}
+            <div className="files-browser-scroll">
+              {isListLoading ? (
+                <LoadingState label={`Loading ${sectionLabel.toLowerCase()}…`} />
+              ) : itemCount ? (
+                // Keyed by location, so moving to another section or folder replays the enter animation.
+                <div className="files-list app-enter" key={`${section}:${currentFolderId ?? ''}:${openCollection?.id ?? ''}`}>
+                  {section === 'library' ? libraryRows : section === 'links' ? linkRows : (
+                    <>
+                      {shownFolders.map(folderRow)}
+                      {shownFiles.map(fileRow)}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <EmptyState
+                  icon={searchTerm ? 'search' : SECTIONS.find((item) => item.id === section)?.icon ?? 'folder'}
+                  headingLevel={2}
+                  title={emptyCopy.title}
+                  description={emptyCopy.description}
+                  actions={searchTerm ? <Button shape="pill" onClick={() => setSearch('')}>Clear search</Button> : primaryAction ?? undefined}
+                />
+              )}
+            </div>
           </section>
 
-          {isActivityOpen ? (
+          {isActivityOpen && isDriveSection ? (
             <aside className="files-activity-panel app-enter-end" aria-label="Recent activity">
               <header><h2>Activity</h2><Button variant="ghost" size="sm" iconOnly icon="close" onClick={() => setIsActivityOpen(false)} aria-label="Close activity" /></header>
               {isLoadingActivity ? <LoadingState compact label="Loading activity…" /> : activity.length ? (
@@ -689,23 +993,27 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
       </div>
 
       <Dialog
-        open={isCreateFolderOpen}
-        onClose={() => setIsCreateFolderOpen(false)}
-        title="New folder"
-        description={`Create a folder in ${currentFolder?.name ?? 'Home'}.`}
+        open={createTarget !== null}
+        onClose={() => setCreateTarget(null)}
+        title={createTarget === 'collection' ? 'New collection' : 'New folder'}
+        description={createTarget === 'collection'
+          ? 'Create a collection in the Library to upload laminates into.'
+          : `Create a folder in ${section === 'files' ? currentFolder?.name ?? 'My Files' : 'My Files'}.`}
         size="sm"
         icon="folder"
-        dismissible={!isCreatingFolder}
-        onSubmit={(event) => void createFolder(event)}
+        dismissible={!isCreating}
+        onSubmit={(event) => void createItem(event)}
         footer={(
           <>
-            <Button shape="pill" disabled={isCreatingFolder} onClick={() => setIsCreateFolderOpen(false)}>Cancel</Button>
-            <Button variant="primary" shape="pill" type="submit" disabled={!folderName.trim()} loading={isCreatingFolder} loadingLabel="Creating…">Create folder</Button>
+            <Button shape="pill" disabled={isCreating} onClick={() => setCreateTarget(null)}>Cancel</Button>
+            <Button variant="primary" shape="pill" type="submit" disabled={!newName.trim()} loading={isCreating} loadingLabel="Creating…">
+              {createTarget === 'collection' ? 'Create collection' : 'Create folder'}
+            </Button>
           </>
         )}
       >
-        <Field label="Folder name">
-          <TextInput autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} maxLength={120} required />
+        <Field label={createTarget === 'collection' ? 'Collection name' : 'Folder name'}>
+          <TextInput autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} maxLength={120} required />
         </Field>
       </Dialog>
 
@@ -729,7 +1037,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
           {isLoadingMoveFolders ? <LoadingState compact label="Loading folders…" /> : (
             <Field label="Destination">
               <Select autoFocus value={moveDestination} onChange={(event) => setMoveDestination(event.target.value)}>
-                <option value="">Home</option>
+                <option value="">My Files</option>
                 {destinationFolders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
               </Select>
             </Field>
@@ -742,7 +1050,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
           open
           tone="danger"
           title={`Delete ${deleteTarget.name}?`}
-          description="Folders inside it are deleted. Files move to Home unless you choose to delete them too."
+          description="Folders inside it are deleted. Files move to My Files unless you choose to delete them too."
           confirmLabel="Delete folder"
           loading={busyId === deleteTarget.id}
           loadingLabel="Deleting…"
@@ -754,6 +1062,22 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
             <span>Delete files inside this folder</span>
           </label>
         </ConfirmDialog>
+      ) : null}
+
+      {libraryDeleteTarget ? (
+        <ConfirmDialog
+          open
+          tone="danger"
+          title={`Delete ${libraryDeleteTarget.item.name}?`}
+          description={libraryDeleteTarget.kind === 'collection'
+            ? 'The collection and the laminates in it are removed from the Library.'
+            : 'This laminate is removed from the Library.'}
+          confirmLabel={libraryDeleteTarget.kind === 'collection' ? 'Delete collection' : 'Delete laminate'}
+          loading={busyId === libraryDeleteTarget.item.id}
+          loadingLabel="Deleting…"
+          onConfirm={() => void confirmLibraryDelete()}
+          onCancel={() => setLibraryDeleteTarget(null)}
+        />
       ) : null}
 
       {shareTarget ? (
@@ -818,7 +1142,7 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
                 {shareLinkTokenValue ? (
                   <div className="files-link-output">
                     <span>Link ready</span>
-                    <Button size="sm" shape="pill" onClick={() => void copyShareLink()}>Copy</Button>
+                    <Button size="sm" shape="pill" onClick={() => void copyLink(`${window.location.origin}/share/${encodeURIComponent(shareLinkTokenValue)}`)}>Copy</Button>
                     <Button variant="destructive" size="sm" shape="pill" onClick={() => void revokeShareLink()} loading={isRevokingLink} loadingLabel="Revoking…">Revoke</Button>
                   </div>
                 ) : null}

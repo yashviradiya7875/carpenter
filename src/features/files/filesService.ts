@@ -1,4 +1,4 @@
-import { callApi } from '../../shared/api/client'
+import { API_BASE_URL, callApi } from '../../shared/api/client'
 
 export type DriveRole = 'owner' | 'admin' | 'editor' | 'viewer'
 export type DriveResourceType = 'file' | 'folder'
@@ -20,6 +20,13 @@ export type DriveFile = {
   myRole?: string
   isFavorite: boolean
   imageUrl?: string
+  /** Small preview of `imageUrl`, when the record has one. */
+  thumbUrl?: string
+  /** The laminate texture a render was made from. */
+  baseImageUrl?: string
+  visibility?: string
+  /** Saved as an uploaded image rather than produced by a render. */
+  isUpload: boolean
   tool?: string
   createdAt?: string
   updatedAt?: string
@@ -53,6 +60,22 @@ function normalizeFolder(value: unknown, parentId: string | null = null): DriveF
   }
 }
 
+/** A URL an <img> can still load; `blob:` URLs written by another session are dead. */
+function displayableUrl(value: unknown): string | undefined {
+  const url = firstString(value)
+  return url && /^(https?:|data:image\/|\/)/i.test(url) ? url : undefined
+}
+
+/** How a record came to exist, from its `settings` JSON (`files-upload` for images uploaded to Files). */
+function settingsSource(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined
+  try {
+    return firstString(asRecord(JSON.parse(value)).source)
+  } catch {
+    return undefined
+  }
+}
+
 function normalizeFile(value: unknown, parentId: string | null = null): DriveFile | null {
   const record = asRecord(value)
   const id = firstString(record.generationId, record.id, record.fileId)
@@ -65,8 +88,12 @@ function normalizeFile(value: unknown, parentId: string | null = null): DriveFil
     myRole: firstString(record.myRole, record.role),
     isFavorite: record.isFavorite === true || record.favorite === true,
     imageUrl: firstString(record.imageUrl, record.url, record.thumbnailUrl, record.thumbUrl),
+    thumbUrl: firstString(record.thumbUrl, record.thumbnailUrl),
+    baseImageUrl: displayableUrl(record.baseImageUrl),
+    visibility: firstString(record.visibility),
+    isUpload: settingsSource(record.settings) === 'files-upload',
     tool: firstString(record.tool),
-    createdAt: firstString(record.createdAt),
+    createdAt: firstString(record.createdAt) ?? (typeof record.timestamp === 'number' ? new Date(record.timestamp).toISOString() : undefined),
     updatedAt: firstString(record.updatedAt),
   }
 }
@@ -95,9 +122,16 @@ export async function listDriveContents(
   }
 }
 
-export async function loadDriveFolderTree(username: string, options: RequestOptions = {}): Promise<DriveFolder[]> {
+/**
+ * Everything in the user's Files, by walking the folders from Home: every folder (for the
+ * folder tree and Move) and every file (for All Assets, Recent, Favorites, Shared, Renders
+ * and Sources, which the API has no listing of their own for).
+ */
+export async function loadDriveIndex(username: string, options: RequestOptions = {}): Promise<DriveContents> {
   const folders: DriveFolder[] = []
-  const visited = new Set<string>()
+  const files: DriveFile[] = []
+  const visitedFolders = new Set<string>()
+  const seenFiles = new Set<string>()
   let pendingParents: Array<string | null> = [null]
 
   while (pendingParents.length) {
@@ -107,17 +141,22 @@ export async function loadDriveFolderTree(username: string, options: RequestOpti
 
     contents.forEach((content) => {
       content.folders.forEach((folder) => {
-        if (visited.has(folder.id)) return
-        visited.add(folder.id)
+        if (visitedFolders.has(folder.id)) return
+        visitedFolders.add(folder.id)
         folders.push(folder)
         nextParents.push(folder.id)
+      })
+      content.files.forEach((file) => {
+        if (seenFiles.has(file.id)) return
+        seenFiles.add(file.id)
+        files.push(file)
       })
     })
 
     pendingParents = nextParents
   }
 
-  return folders
+  return { folders, files }
 }
 
 export async function createDriveFolder(username: string, name: string, parentId: string | null): Promise<DriveFolder> {
@@ -220,58 +259,6 @@ export function getString(value: unknown, ...keys: string[]): string | undefined
   return firstString(...keys.map((key) => value[key]))
 }
 
-export async function uploadDriveImage(username: string, file: File, folderId: string | null): Promise<DriveFile> {
-  const imageUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => typeof reader.result === 'string'
-      ? resolve(reader.result)
-      : reject(new Error(`Could not read ${file.name}.`))
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`))
-    reader.readAsDataURL(file)
-  })
-
-  const saved = await callApi<unknown, {
-    username: string
-    tool: string
-    imageUrl: string
-    baseImageUrl: null
-    prompt: string
-    settings: string
-    creditsUsed: number
-  }>('saveGeneration', {
-    username,
-    tool: 'CARPENTER',
-    imageUrl,
-    baseImageUrl: null,
-    prompt: `Uploaded image: ${file.name}`,
-    settings: JSON.stringify({ source: 'files-upload', originalName: file.name }),
-    creditsUsed: 0,
-  })
-
-  const savedRecord = asRecord(saved)
-  const nestedRecord = asRecord(savedRecord.generation)
-  const fileId = firstString(savedRecord.generationId, savedRecord.id, nestedRecord.generationId, nestedRecord.id)
-  if (!fileId) throw new Error(`The API saved ${file.name} without returning its file ID.`)
-
-  const renamed = await renameDriveResource(username, fileId, 'file', file.name)
-  if (!renamed.success) throw new Error(`${file.name} was saved but could not be renamed.`)
-
-  if (folderId) {
-    const moved = await moveDriveFile(username, fileId, folderId)
-    if (!moved.success) throw new Error(`${file.name} was saved but could not be moved into this folder.`)
-  }
-
-  return {
-    id: fileId,
-    name: file.name,
-    parentId: folderId,
-    isFavorite: false,
-    imageUrl,
-    tool: 'CARPENTER',
-    createdAt: new Date().toISOString(),
-  }
-}
-
 /* ------------------------------------------------------------------ sharing */
 
 export type ShareDraft = {
@@ -325,4 +312,49 @@ export function shareLinkToken(value: unknown): string | null {
   }
   const nested = isRecord(value.shareLink) ? value.shareLink : isRecord(value.link) ? value.link : null
   return nested ? getString(nested, 'token', 'shareToken') ?? null : null
+}
+
+/* ------------------------------------------------------------- render links */
+
+/** A public page for a finished render (`/p/<token>`), created when a render is published. */
+export type RenderLink = {
+  token: string
+  url: string
+  title: string
+  views: number
+  revoked: boolean
+  createdAt?: string
+}
+
+export async function listRenderLinks(username: string, options: RequestOptions = {}): Promise<RenderLink[]> {
+  const result = await callApi<{ links?: unknown[] }, { username: string; page: number; pageSize: number }>(
+    'listProductLinks',
+    { username, page: 1, pageSize: 40 },
+    options,
+  )
+  const links: RenderLink[] = []
+  for (const item of Array.isArray(result.links) ? result.links : []) {
+    const record = asRecord(item)
+    const token = firstString(record.token)
+    if (!token) continue
+    const url = firstString(record.url) ?? ''
+    links.push({
+      token,
+      // The link may come back relative to the API origin.
+      url: url.startsWith('/') ? `${API_BASE_URL}${url}` : url,
+      title: firstString(record.title) ?? 'Render link',
+      views: typeof record.views === 'number' ? record.views : 0,
+      revoked: record.revoked === true,
+      createdAt: firstString(record.createdAt),
+    })
+  }
+  return links
+}
+
+/** Disables a render link, or enables it again. */
+export function setRenderLinkRevoked(username: string, token: string, revoked: boolean) {
+  return callApi<{ success: boolean; revoked?: boolean }, { username: string; token: string; revoked: boolean }>(
+    'revokeProductLink',
+    { username, token, revoked },
+  )
 }

@@ -13,11 +13,12 @@ src/
     ui/                     Portable design system: tokens, primitives, components, layout (see shared/ui/README.md)
     components/             Carpenter-specific shared UI: AppHeader (the global header), StepPanel (frame for inline flow steps), RoomSelect (room step), MaterialPlacement (mark where two materials go on the room photo), Brand, Mark
     api/                    Typed callable client and ApiError
+    catalog/                Laminate library API (collections, products, upload), used by the studio and by Files
     auth/                   Session storage, account types and account rules (role labels, app access)
   features/
     auth/                   Sign-in / sign-up / recovery UI; authService (API), useSession (session lifecycle)
     dashboard/              Studio workspace, laminate library, render result actions (download, share, save to Files); dashboardService (API), materials, renderActions
-    files/                  Files (Drive) UI and public share page; filesService (API + normalizers), filesPermissions
+    files/                  Files workspace (sidebar sections, folders, Library collections, render links) and public share page; filesService (API + normalizers), filesPermissions, useLibrary
     prototype/              Preserved dashboard mock; not part of the app entry
 ```
 
@@ -27,7 +28,7 @@ src/
 |---|---|---|
 | `shared/ui` | React only | Anything outside `shared/ui` — it is copied as-is into other projects |
 | `shared/components` | `shared/ui` | Features, API calls |
-| `shared/api`, `shared/auth` | Each other | UI |
+| `shared/api`, `shared/auth`, `shared/catalog` | Each other | UI |
 | `features/<name>` | `shared/*` | Another feature — cross-feature composition happens in `app/` (e.g. Dashboard receives a `renderFiles` slot) |
 | `app/` | Everything | Business logic of its own |
 
