@@ -131,6 +131,8 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const [placementRoom, setPlacementRoom] = useState<RoomSelection | null>(null)
   const [isPlacementOpen, setIsPlacementOpen] = useState(false)
   const [placementKey, setPlacementKey] = useState(0)
+  // Re-configure: back from the result to the last configuration step, where Back returns to the result.
+  const [isReconfiguring, setIsReconfiguring] = useState(false)
   const placementStep = useRef<HTMLElement>(null)
   const uploadStep = useRef<HTMLDivElement>(null)
   const roomStep = useRef<HTMLElement>(null)
@@ -274,6 +276,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     const selection = classifyUpload(files)
     // A new upload starts over in the studio; its validation errors belong there, not on the stage.
     setIsStageRequested(false)
+    setIsReconfiguring(false)
     setGenerationError('')
     if (!selection.ok) {
       setGenerationError(selection.message)
@@ -554,10 +557,16 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     }
   }
 
+  // Shown on a step's confirm action, which stays disabled, instead of failing silently.
+  const generateBlockedReason = hasInsufficientCredits
+    ? `Not enough credits: this needs ${creditsLabel(totalCost ?? 0)} and you have ${credits ?? 0}.`
+    : undefined
+
   // Generate → choose a room → confirm → render.
   const openRoomStep = () => {
     if (!canGenerate || isGenerating) return
     setGenerationError('')
+    setIsReconfiguring(false)
     setIsRoomStepOpen(true)
     if (!roomLibrary && !isLoadingRooms) void loadRooms()
   }
@@ -587,8 +596,33 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     lastPlan.current = plan
     setIsRoomStepOpen(false)
     setIsPlacementOpen(false)
+    setIsReconfiguring(false)
     setIsStageRequested(true)
     void generateRender(room, plan)
+  }
+
+  // From the result back to its configuration, nothing rendered yet: the placement step with its
+  // marked areas as they were when there are two materials on a room photo, otherwise the room step.
+  const canReconfigure = uploadKind === 'single' && primaryMaterial !== null
+  const reconfigure = () => {
+    if (!canReconfigure || isGenerating) return
+    const room = lastRoom.current
+    setIsStageRequested(false)
+    setIsReconfiguring(true)
+    if (room && accentMaterial && placementRoom && isSameRoom(placementRoom, room)) {
+      setIsPlacementOpen(true)
+    } else {
+      setIsRoomStepOpen(true)
+      if (!roomLibrary && !isLoadingRooms) void loadRooms()
+    }
+  }
+
+  // Leaves the re-configure steps without rendering; the last result is still there.
+  const returnToResult = () => {
+    setIsRoomStepOpen(false)
+    setIsPlacementOpen(false)
+    setIsReconfiguring(false)
+    setIsStageRequested(true)
   }
 
   const generateRender = async (room: RoomSelection | null, plan: PlacementPlan | null) => {
@@ -932,8 +966,10 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             onRetry={() => void loadRooms()}
             confirmLabel={totalCost !== null ? `Continue · ${creditsLabel(totalCost)}` : 'Continue'}
             onConfirm={confirmRoom}
+            blockedReason={generateBlockedReason}
             onSkip={() => confirmRoom(null)}
-            onBack={() => setIsRoomStepOpen(false)}
+            onBack={isReconfiguring ? returnToResult : () => setIsRoomStepOpen(false)}
+            backLabel={isReconfiguring ? 'Back to result' : undefined}
           />
 
           {/* Step 3, for two materials: mark where each goes on the room photo. */}
@@ -946,11 +982,13 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
               materials={[primaryMaterial, accentMaterial]}
               confirmLabel={totalCost !== null ? `Generate · ${creditsLabel(totalCost)}` : 'Generate'}
               onConfirm={confirmPlacement}
+              blockedReason={generateBlockedReason}
               onSkip={() => startGeneration(placementRoom, null)}
-              onBack={() => {
+              onBack={isReconfiguring ? returnToResult : () => {
                 setIsPlacementOpen(false)
                 setIsRoomStepOpen(true)
               }}
+              backLabel={isReconfiguring ? 'Back to result' : undefined}
             />
           ) : null}
         </section>
@@ -975,6 +1013,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             onShare={canShare ? openShare : undefined}
             onSaveToFiles={canSaveToFiles ? () => void handleSaveToFiles() : undefined}
             saveStatus={isSavingToFiles ? 'saving' : savedImageUrl !== null && savedImageUrl === render?.imageUrl ? 'saved' : 'idle'}
+            onReconfigure={canReconfigure ? reconfigure : undefined}
             notice={resultNotice}
             onDismissNotice={() => setResultNotice(null)}
           />

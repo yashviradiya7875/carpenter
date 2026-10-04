@@ -60,6 +60,12 @@
   white-space: nowrap;
 }
 
+/* Why the step can't be confirmed; allowed to wrap so the whole reason is readable. */
+.step-panel-summary.is-blocked {
+  color: var(--color-danger-text);
+  white-space: normal;
+}
+
 @media (pointer: coarse) {
   .step-panel .app-button {
     --app-button-height: var(--control-height-md);

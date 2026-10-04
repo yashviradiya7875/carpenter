@@ -153,7 +153,7 @@
 
 @media (max-width: 760px) {
   .carpenter-dashboard.is-placement-step .workspace-composer {
-    --placement-photo-max-height: clamp(200px, calc(96dvh - 430px), 520px);
+    --placement-photo-max-height: clamp(200px, calc(96dvh - 450px), 520px);
   }
 }
 

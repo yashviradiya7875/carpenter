@@ -182,7 +182,7 @@
   user-select: none;
 }
 
-/* A marked area. Clicks pass through to the surface, so a new area can start on top of one. */
+/* A marked area. The other material's areas let presses through, so drawing can start on top of them. */
 .placement-area {
   position: absolute;
   border: 1.5px solid var(--placement-color);
@@ -206,10 +206,39 @@
   border-style: dashed;
 }
 
-/* Areas of the material being placed stand out; the other material's step back. */
+/* Areas of the material being placed stand out and can be dragged; the other material's step back. */
 .placement-area.is-active {
   opacity: 1;
+  cursor: move;
+  pointer-events: auto;
 }
+
+/* Dragged onto the other material's area: it will go back when released. */
+.placement-area.is-invalid {
+  --placement-color: var(--color-danger);
+  --placement-fill: var(--color-danger-bg);
+}
+
+/* Corner handles for resizing; the invisible margin makes them easy to grab. */
+.placement-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--placement-color);
+  box-shadow: 0 0 0 1px var(--placement-edge);
+}
+
+.placement-handle::after {
+  position: absolute;
+  inset: -7px;
+  content: '';
+}
+
+.placement-handle--nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.placement-handle--ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.placement-handle--sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.placement-handle--se { right: -5px; bottom: -5px; cursor: nwse-resize; }
 
 .placement-area:focus-visible {
   outline: var(--focus-ring);
@@ -228,10 +257,6 @@
   transition: none;
 }
 
-.placement-draft.is-invalid {
-  --placement-color: var(--color-danger);
-  --placement-fill: var(--color-danger-bg);
-}
 
 .placement-area-remove {
   position: absolute;
@@ -269,6 +294,20 @@
 }
 
 @media (pointer: coarse) {
+  .placement-handle {
+    width: 14px;
+    height: 14px;
+  }
+
+  .placement-handle::after {
+    inset: -12px;
+  }
+
+  .placement-handle--nw { top: -7px; left: -7px; }
+  .placement-handle--ne { top: -7px; right: -7px; }
+  .placement-handle--sw { bottom: -7px; left: -7px; }
+  .placement-handle--se { right: -7px; bottom: -7px; }
+
   .placement-area-remove {
     width: 28px;
     height: 28px;

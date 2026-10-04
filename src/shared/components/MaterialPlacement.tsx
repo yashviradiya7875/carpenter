@@ -21,6 +21,8 @@ export type MaterialPlacementProps = {
   /** Confirm button content, e.g. "Generate · 2 credits". */
   confirmLabel?: ReactNode
   onConfirm: (areas: PlacementArea[]) => void
+  /** Why confirming isn't possible right now (e.g. not enough credits); shown in place of the summary. */
+  blockedReason?: string
   /** Offered when the room photo can't be shown, to continue without marking areas. */
   onSkip?: () => void
   skipLabel?: ReactNode
@@ -39,12 +41,22 @@ const MIN_SIDE = 0.02
 const KEY_STEP = 0.01
 /** Boxes may touch; they only conflict once they overlap by more than this. */
 const OVERLAP_TOLERANCE = 0.004
+const CORNERS = ['nw', 'ne', 'sw', 'se'] as const
+
+type Point = { x: number; y: number }
+
+/** What a press on the photo is doing until it is released. */
+type Interaction =
+  | { kind: 'draw'; start: Point }
+  | { kind: 'move'; id: number; from: Point; box: PlacementBox; before: PlacementArea[] }
+  /** `anchor` is the corner opposite the one being dragged; it stays put. */
+  | { kind: 'resize'; id: number; anchor: Point; before: PlacementArea[] }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-function boxBetween(a: { x: number; y: number }, b: { x: number; y: number }): PlacementBox {
+function boxBetween(a: Point, b: Point): PlacementBox {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }
 }
 
@@ -63,7 +75,8 @@ function countLabel(count: number): string {
 
 /**
  * Placement step for a render that uses two materials: choose a material, then drag over
- * the room photo to mark where it goes. One material's areas can't overlap the other's.
+ * the room photo to mark where it goes. Its areas can then be dragged to move them, resized
+ * from their corners, or removed. One material's areas can't overlap the other's.
  * Whatever is left unmarked on the furniture takes the other material, so marking for
  * one of them is enough. Purely presentational: the caller receives the marked areas.
  */
@@ -74,6 +87,7 @@ export function MaterialPlacement({
   backLabel,
   confirmLabel = 'Continue',
   onConfirm,
+  blockedReason,
   onSkip,
   skipLabel = 'Continue without marking',
   title = 'Place your materials',
@@ -89,7 +103,7 @@ export function MaterialPlacement({
   const [draft, setDraft] = useState<PlacementBox | null>(null)
   const [problem, setProblem] = useState('')
   const [imageStatus, setImageStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
-  const dragStart = useRef<{ x: number; y: number } | null>(null)
+  const interaction = useRef<Interaction | null>(null)
   const nextId = useRef(1)
   // The area being adjusted from the keyboard: its key presses share one undo step.
   const adjustingId = useRef<number | null>(null)
@@ -147,9 +161,12 @@ export function MaterialPlacement({
     adjustingId.current = null
   }
 
-  /* Drawing: press, drag, release. Pointer events cover mouse, pen and touch alike. */
+  /*
+   * Pointer work, for mouse, pen and touch alike. A press on empty photo draws a new area;
+   * on an area of the active material it moves it; on one of its corners it resizes it.
+   */
 
-  const pointAt = (event: PointerEvent<HTMLDivElement>) => {
+  const pointAt = (event: PointerEvent<HTMLDivElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect()
     return {
       x: clamp((event.clientX - bounds.left) / bounds.width, 0, 1),
@@ -159,7 +176,8 @@ export function MaterialPlacement({
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
-    if ((event.target as HTMLElement).closest('button')) return // an area's remove button
+    const target = event.target as HTMLElement
+    if (target.closest('button')) return // an area's remove button
     // Keeps the drag going when the pointer leaves the photo. Not essential, so never fatal.
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -167,27 +185,73 @@ export function MaterialPlacement({
       // The pointer is already gone; the drag just ends at the photo's edge.
     }
     const point = pointAt(event)
-    dragStart.current = point
-    setDraft({ ...point, w: 0, h: 0 })
+    const areaId = Number(target.closest<HTMLElement>('[data-area-id]')?.dataset.areaId)
+    const area = areas.find((item) => item.id === areaId)
+    const corner = target.dataset.corner
+    if (area && corner) {
+      const anchor = { x: corner.includes('w') ? area.x + area.w : area.x, y: corner.includes('n') ? area.y + area.h : area.y }
+      interaction.current = { kind: 'resize', id: area.id, anchor, before: areas }
+    } else if (area) {
+      interaction.current = { kind: 'move', id: area.id, from: point, box: area, before: areas }
+    } else {
+      interaction.current = { kind: 'draw', start: point }
+      setDraft({ ...point, w: 0, h: 0 })
+    }
     setProblem('')
   }
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (dragStart.current) setDraft(boxBetween(dragStart.current, pointAt(event)))
+    const current = interaction.current
+    if (!current) return
+    const point = pointAt(event)
+    if (current.kind === 'draw') {
+      setDraft(boxBetween(current.start, point))
+      return
+    }
+    let next: PlacementBox
+    if (current.kind === 'move') {
+      const { box, from } = current
+      next = { ...box, x: clamp(box.x + point.x - from.x, 0, 1 - box.w), y: clamp(box.y + point.y - from.y, 0, 1 - box.h) }
+    } else {
+      // Never smaller than a stray tap, and never past the photo's edge.
+      const { anchor } = current
+      const w = Math.max(Math.abs(point.x - anchor.x), MIN_SIDE)
+      const h = Math.max(Math.abs(point.y - anchor.y), MIN_SIDE)
+      const x = point.x < anchor.x ? Math.max(0, anchor.x - w) : anchor.x
+      const y = point.y < anchor.y ? Math.max(0, anchor.y - h) : anchor.y
+      next = { x, y, w: Math.min(w, 1 - x), h: Math.min(h, 1 - y) }
+    }
+    setAreas((items) => items.map((item) => (item.id === current.id ? { ...item, ...next } : item)))
   }
 
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
-    const start = dragStart.current
-    dragStart.current = null
-    setDraft(null)
-    if (!start) return
-    const box = boxBetween(start, pointAt(event))
-    if (box.w >= MIN_SIDE && box.h >= MIN_SIDE) addArea(box)
+    const current = interaction.current
+    interaction.current = null
+    if (!current) return
+    if (current.kind === 'draw') {
+      setDraft(null)
+      const box = boxBetween(current.start, pointAt(event))
+      if (box.w >= MIN_SIDE && box.h >= MIN_SIDE) addArea(box)
+      return
+    }
+    // A moved or resized area that ends up on the other material's goes back where it was.
+    const adjusted = areas.find((item) => item.id === current.id)
+    const original = current.before.find((item) => item.id === current.id)
+    if (!adjusted || !original) return
+    if (conflictsWith(adjusted, adjusted.material, adjusted.id)) {
+      setAreas(current.before)
+      setProblem(overlapMessage(adjusted.material))
+    } else if (adjusted.x !== original.x || adjusted.y !== original.y || adjusted.w !== original.w || adjusted.h !== original.h) {
+      setHistory((items) => [...items, current.before])
+      adjustingId.current = null
+    }
   }
 
-  const cancelDrag = () => {
-    dragStart.current = null
+  const cancelInteraction = () => {
+    const current = interaction.current
+    interaction.current = null
     setDraft(null)
+    if (current && current.kind !== 'draw') setAreas(current.before)
   }
 
   // Arrow keys move an area, Shift + arrows resize it, Delete removes it.
@@ -234,8 +298,8 @@ export function MaterialPlacement({
       backLabel={backLabel}
       footer={(
         <>
-          <span className="step-panel-summary" role="status">{summary}</span>
-          <Button variant="primary" size="sm" shape="pill" icon="spark" disabled={!areas.length} onClick={() => onConfirm(areas)}>
+          <span className={cx('step-panel-summary', blockedReason && 'is-blocked')} role="status">{blockedReason ?? summary}</span>
+          <Button variant="primary" size="sm" shape="pill" icon="spark" disabled={!areas.length || Boolean(blockedReason)} onClick={() => onConfirm(areas)}>
             {confirmLabel}
           </Button>
         </>
@@ -308,7 +372,7 @@ export function MaterialPlacement({
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
-                onPointerCancel={cancelDrag}
+                onPointerCancel={cancelInteraction}
               >
                 {areas.map((area) => {
                   const isActive = area.material === active
@@ -317,15 +381,24 @@ export function MaterialPlacement({
                   return (
                     <div
                       key={area.id}
-                      className={cx('placement-area', `placement-area--${area.material + 1}`, isActive && 'is-active')}
+                      className={cx(
+                        'placement-area',
+                        `placement-area--${area.material + 1}`,
+                        isActive && 'is-active',
+                        isActive && conflictsWith(area, area.material, area.id) && 'is-invalid',
+                      )}
                       style={boxStyle(area)}
+                      data-area-id={area.id}
                       role="group"
-                      aria-label={isActive ? `${name}. Arrow keys move it, Shift with arrow keys resizes it, Delete removes it.` : name}
+                      aria-label={isActive ? `${name}. Drag to move it, or use the arrow keys; Shift with arrow keys resizes it, Delete removes it.` : name}
                       tabIndex={isActive ? 0 : -1}
                       onKeyDown={isActive ? (event) => handleAreaKeyDown(event, area) : undefined}
                       onBlur={() => { adjustingId.current = null }}
                     >
                       <span className="placement-tag" aria-hidden="true">{area.material + 1}</span>
+                      {isActive ? CORNERS.map((corner) => (
+                        <span key={corner} className={`placement-handle placement-handle--${corner}`} data-corner={corner} aria-hidden="true" />
+                      )) : null}
                       {isActive ? (
                         <button
                           type="button"
@@ -349,7 +422,8 @@ export function MaterialPlacement({
             </div>
             {imageStatus === 'ready' ? (
               <p className="placement-hint">
-                Drag on the photo to mark where Material {active + 1} goes.{' '}
+                Drag on the photo to mark where Material {active + 1} goes
+                {counts[active] ? '; drag an area to move it, or a corner to resize it' : ''}.{' '}
                 {restIndex === null
                   ? `Material ${other + 1} then covers the rest of the furniture.`
                   : `Material ${restIndex + 1} covers the rest of the furniture.`}

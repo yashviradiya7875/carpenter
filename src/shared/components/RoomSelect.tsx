@@ -21,6 +21,8 @@ export type RoomSelectProps = {
   /** Confirm button content, e.g. "Continue · 2 credits". */
   confirmLabel?: ReactNode
   onConfirm: (selection: RoomSelection) => void
+  /** Why confirming isn't possible right now (e.g. not enough credits); shown in place of the summary. */
+  blockedReason?: string
   /** Offered when the library has no rooms to choose from, e.g. to continue with a generated room. */
   onSkip?: () => void
   skipLabel?: ReactNode
@@ -49,6 +51,7 @@ export function RoomSelect({
   initialSelection = null,
   confirmLabel = 'Continue',
   onConfirm,
+  blockedReason,
   onSkip,
   skipLabel = 'Continue without a room',
   title = 'Choose where it lives',
@@ -102,12 +105,18 @@ export function RoomSelect({
       backLabel={backLabel}
       footer={(
         <>
-          <span className="step-panel-summary" role="status">
-            {selection
+          <span className={cx('step-panel-summary', blockedReason && 'is-blocked')} role="status">
+            {blockedReason ?? (selection
               ? `${selection.kind === 'custom' ? 'Your room' : selection.scene.name} selected`
-              : 'Select a room to continue'}
+              : 'Select a room to continue')}
           </span>
-          <Button variant="primary" size="sm" shape="pill" disabled={!selection || isPreparing} onClick={() => selection && onConfirm(selection)}>
+          <Button
+            variant="primary"
+            size="sm"
+            shape="pill"
+            disabled={!selection || isPreparing || Boolean(blockedReason)}
+            onClick={() => selection && onConfirm(selection)}
+          >
             {confirmLabel}
           </Button>
         </>

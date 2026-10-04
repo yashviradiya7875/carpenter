@@ -37,6 +37,8 @@ type GenerationStageProps = {
   onShare?: () => void
   onSaveToFiles?: () => void
   saveStatus: 'idle' | 'saving' | 'saved'
+  /** Back to the room or placement step with everything as it was, to adjust and render again. Left out when there is nothing to adjust. */
+  onReconfigure?: () => void
   notice: ResultNotice | null
   onDismissNotice: () => void
   ref?: Ref<HTMLElement>
@@ -63,6 +65,7 @@ export function GenerationStage({
   onShare,
   onSaveToFiles,
   saveStatus,
+  onReconfigure,
   notice,
   onDismissNotice,
   ref,
@@ -151,6 +154,9 @@ export function GenerationStage({
                 >
                   {saveStatus === 'saved' ? 'Saved to Files' : 'Save to Files'}
                 </Button>
+              ) : null}
+              {onReconfigure ? (
+                <Button variant="ghost" size="sm" shape="pill" icon="refresh" onClick={onReconfigure}>Re-configure</Button>
               ) : null}
               {/* The main action when sharing isn't available to this account. */}
               <Button variant={onShare ? 'ghost' : 'primary'} size="sm" shape="pill" icon="plus" onClick={onBack}>New render</Button>
