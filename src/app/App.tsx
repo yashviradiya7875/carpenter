@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AuthPage from '../features/auth/AuthPage'
 import { useSession } from '../features/auth/useSession'
 import DashboardPage from '../features/dashboard/DashboardPage'
@@ -6,8 +6,8 @@ import { FilesPage } from '../features/files/FilesPage'
 import { SharedResourcePage } from '../features/files/SharedResourcePage'
 import type { AuthAccount } from '../shared/auth/types'
 import { AppHeader } from '../shared/components/AppHeader'
-import { buttonClasses, LoadingState } from '../shared/ui'
-import { useView } from './useView'
+import { Button, buttonClasses, EmptyState, LoadingState } from '../shared/ui'
+import { shareTokenFromLocation, useView } from './useView'
 import './App.css'
 
 /**
@@ -17,22 +17,48 @@ import './App.css'
  *    ├── AppHeader   (the single global header)
  *    └── page content
  *
- * Pages have their own URLs: the studio at `/`, Files at `/files` (see useView), and the
- * public share page at `/share/<token>`.
+ * Pages have their own URLs: the studio at `/`, Files at `/files`, and the public share page
+ * at `/share/<token>` (see useView). Any other URL shows the app's own "page not found".
+ * The studio and Files need a session; opening them signed out shows sign-in first, then the page.
  * The theme is global too: ThemeProvider wraps App in main.tsx.
  * Features never import each other; they are wired together here.
  */
 function App() {
-  const shareMatch = window.location.pathname.match(/^\/share\/([^/]+)\/?$/)
-  if (shareMatch) {
+  const [view, goTo] = useView()
+  const shareToken = view === 'share' ? shareTokenFromLocation() : null
+
+  if (shareToken) {
     return (
       <div className="app-shell">
         <AppHeader actions={<a className={buttonClasses({ size: 'sm', shape: 'pill' })} href="/">Carpenter Pro</a>} />
-        <SharedResourcePage token={decodeURIComponent(shareMatch[1])} />
+        <SharedResourcePage token={shareToken} />
       </div>
     )
   }
+  if (view === 'not-found') return <NotFoundPage onHome={() => goTo('studio')} />
   return <SignedInApp />
+}
+
+/** Shown for a URL that isn't one of the app's pages, signed in or not. */
+function NotFoundPage({ onHome }: { onHome: () => void }) {
+  useEffect(() => {
+    document.title = 'Page not found · Carpenter Pro'
+  }, [])
+
+  return (
+    <div className="app-shell">
+      <AppHeader onHome={onHome} />
+      <main className="not-found-page app-enter-fade">
+        <EmptyState
+          icon="search"
+          headingLevel={1}
+          title="Page not found"
+          description="This address doesn’t match a page in Carpenter Pro. It may have been mistyped, or the page may have moved."
+          actions={<Button variant="primary" shape="pill" icon="back" onClick={onHome}>Go to the studio</Button>}
+        />
+      </main>
+    </div>
+  )
 }
 
 function SignedInApp() {

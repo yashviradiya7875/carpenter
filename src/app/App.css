@@ -8,6 +8,14 @@
   background: var(--background-studio);
 }
 
+/* The app's own "page not found", for URLs that match no page. */
+.not-found-page {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--space-4);
+}
+
 /* Shown while a stored session is validated. */
 .checking-screen {
   min-height: 100svh;

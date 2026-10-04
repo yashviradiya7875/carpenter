@@ -36,7 +36,9 @@ src/
 
 `app/App.tsx` renders every page inside the same shell: `AppHeader` (logo, credits, theme toggle, account menu) above the page content. Pages never render their own header, and never contain theme logic. They style themselves with semantic tokens, so light and dark work automatically. App-level state the header shows (credits, current view) lives in the shell. Pages report changes through callbacks such as `onCreditsChange`.
 
-Pages have their own URLs, handled in `app/useView.ts` with the History API (no router dependency): the studio at `/`, Files at `/files`, and the public share page at `/share/<token>`. The host must serve `index.html` for these paths; the nginx vhost in `deploy/` already does.
+Pages have their own URLs, handled in `app/useView.ts` with the History API (no router dependency): the studio at `/`, Files at `/files`, and the public share page at `/share/<token>`. Any other URL shows the app's own "Page not found". To add a page, add it to `useView.ts`.
+
+The host must serve `index.html` for every path that is not a real file, or a refresh or direct link returns the host's 404. `vercel.json` does this on Vercel and the nginx vhost in `deploy/` does it on the VPS. Both leave `/api/*` and `/assets/*` alone, so a missing asset or a mistaken same-origin API call fails as a 404 instead of returning the app's HTML. The API itself is on its own origin (`VITE_API_BASE_URL`, set in the host's environment variables at build time).
 
 Inside a feature:
 
