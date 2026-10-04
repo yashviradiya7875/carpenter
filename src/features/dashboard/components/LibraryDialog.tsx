@@ -18,9 +18,6 @@ type LibraryDialogProps = {
   onClose: () => void
   onSearchChange: (search: string) => void
   onSelectCollection: (collectionId: string) => void
-  onCreateCollection: () => void
-  onUploadImages: () => void
-  onUploadFolder: () => void
   onSelectProduct: (productId: string) => void
   onDeleteProduct: (product: Product) => Promise<boolean>
   onDeleteCollection: (collection: Collection) => Promise<boolean>
@@ -31,8 +28,10 @@ type DeletionTarget =
   | { type: 'product'; item: Product }
   | { type: 'collection'; item: Collection }
 
-const UPLOAD_NAMING_HINT = 'Upload images — elegant_black_x.png and elegant_black_y.png become one laminate with two faces. Upload a folder and its name becomes the laminate.'
-
+/**
+ * Picks a laminate from the library: collections on the left, the laminates of the open one
+ * on the right. Browsing only; collections are created and filled in Files › Library.
+ */
 export function LibraryDialog({
   activeCollection,
   collections,
@@ -48,9 +47,6 @@ export function LibraryDialog({
   onClose,
   onSearchChange,
   onSelectCollection,
-  onCreateCollection,
-  onUploadImages,
-  onUploadFolder,
   onSelectProduct,
   onDeleteProduct,
   onDeleteCollection,
@@ -112,19 +108,6 @@ export function LibraryDialog({
             placeholder="Search laminates…"
             aria-label="Search laminates"
           />
-
-          <div className="library-toolbar-group">
-            <Button shape="pill" icon="plus" onClick={onCreateCollection}>Collection</Button>
-          </div>
-
-          <div className="library-upload-actions">
-            <Button variant="primary" shape="pill" icon="upload" className="library-upload-button" onClick={onUploadImages}>
-              Upload images
-            </Button>
-            <Button shape="pill" icon="folder" className="library-upload-button" onClick={onUploadFolder}>
-              Upload folder
-            </Button>
-          </div>
         </div>
 
         {error && !deletionTarget ? <Alert tone="error" className="library-message">{error}</Alert> : null}
@@ -213,14 +196,7 @@ export function LibraryDialog({
                       ) : search.trim() ? (
                         <EmptyState compact icon="search" headingLevel={3} title="No matching laminates" description="Try another search." />
                       ) : (
-                        <EmptyState
-                          compact
-                          icon="image"
-                          headingLevel={3}
-                          title="No laminates yet"
-                          description={UPLOAD_NAMING_HINT}
-                          actions={<Button variant="primary" shape="pill" icon="upload" onClick={onUploadImages}>Upload images</Button>}
-                        />
+                        <EmptyState compact icon="image" headingLevel={3} title="No laminates yet" description="Laminates added to this collection appear here." />
                       )}
                     </>
                   ) : (
@@ -229,13 +205,7 @@ export function LibraryDialog({
                 </section>
               </div>
             ) : (
-              <EmptyState
-                icon="layers"
-                headingLevel={3}
-                title="No collections yet"
-                description={`Create a collection to start your library. ${UPLOAD_NAMING_HINT}`}
-                actions={<Button variant="primary" shape="pill" icon="plus" onClick={onCreateCollection}>New collection</Button>}
-              />
+              <EmptyState icon="layers" headingLevel={3} title="No collections yet" description="Collections in your library appear here." />
             )}
           </div>
         )}

@@ -903,20 +903,6 @@
   flex: 1;
 }
 
-.library-toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.library-upload-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
 .library-body {
   min-height: 310px;
   flex: 1;
@@ -1194,15 +1180,6 @@
   .library-search {
     width: 100%;
     flex: none;
-  }
-
-  .library-toolbar-group,
-  .library-upload-actions {
-    width: 100%;
-  }
-
-  .library-upload-button {
-    flex: 1;
   }
 
   .library-body {

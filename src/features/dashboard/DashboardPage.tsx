@@ -13,7 +13,6 @@ import { MaterialPill } from './components/MaterialPill'
 import { OverviewStat } from './components/OverviewStat'
 import { ShareDialog, type ShareDraft } from './components/ShareDialog'
 import {
-  createLaminateCollection,
   deleteCollection,
   deleteProduct,
   generateCarpenterRender,
@@ -28,7 +27,6 @@ import {
   recordShareAttempt,
   roomName,
   saveRenderToFiles,
-  uploadLaminateProducts,
   type GenerationResult,
   type RoomLibrary,
   type ShareClient,
@@ -89,7 +87,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const [products, setProducts] = useState<Product[]>([])
   const [activeCollection, setActiveCollection] = useState<Collection | null>(null)
   const [selectedLibraryProductId, setSelectedLibraryProductId] = useState<string | null>(null)
-  const [selectedLibraryCollectionId, setSelectedLibraryCollectionId] = useState<string>('')
   const [librarySearch, setLibrarySearch] = useState('')
   const [libraryError, setLibraryError] = useState('')
   const [libraryNotice, setLibraryNotice] = useState('')
@@ -144,8 +141,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const overviewCollapse = useRef<HTMLButtonElement>(null)
   const overviewWasOpen = useRef(false)
   const uploadInput = useRef<HTMLInputElement>(null)
-  const libraryImageInput = useRef<HTMLInputElement>(null)
-  const libraryFolderInput = useRef<HTMLInputElement>(null)
 
   const capabilities = account.capabilities
   const canUpload = capabilities?.canUploadLaminate === true
@@ -180,18 +175,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       .catch(() => undefined)
     return () => controller.abort()
   }, [account.role, account.username])
-
-  useEffect(() => {
-    const folderInput = libraryFolderInput.current
-    if (folderInput) {
-      const browserFolderInput = folderInput as unknown as {
-        webkitdirectory?: string
-        directory?: string
-      }
-      browserFolderInput.webkitdirectory = ''
-      browserFolderInput.directory = ''
-    }
-  }, [])
 
   useEffect(() => {
     if (!isOverviewOpen) {
@@ -329,88 +312,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     void handleUpload(Array.from(event.dataTransfer.files))
   }
 
-  const addLibraryProducts = async (files: File[], collectionId: string | null) => {
-    if (!collectionId) {
-      setLibraryError('Create or select a collection before you upload laminates.')
-      return
-    }
-
-    const uniqueFiles = files.filter((file) => file.type.startsWith('image/') || file.type.length === 0)
-    if (!uniqueFiles.length) {
-      setLibraryError('Only image files can be added to a laminate collection.')
-      return
-    }
-
-    try {
-      setIsLibraryLoading(true)
-      const result = await uploadLaminateProducts(account.username, collectionId, uniqueFiles)
-
-      if (result.collection) {
-        setCollections((current) => {
-          const existing = current.some((collection) => collection.id === result.collection!.id)
-          if (existing) {
-            return current.map((collection) => collection.id === result.collection!.id ? { ...collection, ...result.collection! } : collection)
-          }
-          return [result.collection!, ...current]
-        })
-      }
-
-      if (activeCollection && activeCollection.id === collectionId) {
-        const nextCollection = collections.find((collection) => collection.id === collectionId) ?? activeCollection
-        if (nextCollection) {
-          await openCollection(nextCollection, librarySearch)
-        }
-      } else {
-        const nextCollection = collections.find((collection) => collection.id === collectionId)
-        if (nextCollection) {
-          await openCollection(nextCollection, librarySearch)
-        }
-      }
-
-      setLibraryError('')
-    } catch (error) {
-      setLibraryError(messageFor(error))
-    } finally {
-      setIsLibraryLoading(false)
-    }
-  }
-
-  const createCollection = async () => {
-    const collectionName = window.prompt('Name your collection', `Collection ${collections.length + 1}`)
-    if (!collectionName) return
-
-    const trimmed = collectionName.trim()
-    if (!trimmed) return
-
-    try {
-      setIsLibraryLoading(true)
-      const collection = await createLaminateCollection(account.username, trimmed)
-
-      setCollections((current) => [collection, ...current])
-      setSelectedLibraryCollectionId(collection.id)
-      setActiveCollection(collection)
-      setProducts([])
-      setSelectedLibraryProductId(null)
-      setLibraryError('')
-    } catch (error) {
-      setLibraryError(messageFor(error))
-    } finally {
-      setIsLibraryLoading(false)
-    }
-  }
-
-  const handleLibraryImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? [])
-    event.currentTarget.value = ''
-    void addLibraryProducts(files, activeCollection?.id ?? selectedLibraryCollectionId)
-  }
-
-  const handleLibraryFolderUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.currentTarget.files ?? [])
-    event.currentTarget.value = ''
-    void addLibraryProducts(files, activeCollection?.id ?? selectedLibraryCollectionId)
-  }
-
   const openLibrary = async (slot: MaterialSlot, searchOverride = '') => {
     setLibrarySlot(slot)
     setLibraryError('')
@@ -421,7 +322,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       const nextCollections = await listLaminateCollections(account.username, searchOverride)
       setCollections(nextCollections)
       const firstCollection = nextCollections[0]
-      setSelectedLibraryCollectionId(firstCollection?.id ?? '')
       if (firstCollection) {
         setActiveCollection(firstCollection)
         setProducts([])
@@ -438,7 +338,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   }
 
   const openCollection = async (collection: Collection, searchOverride = librarySearch) => {
-    setSelectedLibraryCollectionId(collection.id)
     setActiveCollection(collection)
     setSelectedLibraryProductId(null)
     setProducts([])
@@ -499,7 +398,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       if (activeCollection?.id === collection.id) {
         const nextCollection = remainingCollections[0] ?? null
         setActiveCollection(nextCollection)
-        setSelectedLibraryCollectionId(nextCollection?.id ?? '')
         setProducts([])
         setSelectedLibraryProductId(null)
         if (nextCollection) await openCollection(nextCollection, librarySearch)
@@ -800,23 +698,6 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             accept="image/*,video/*"
             multiple
             onChange={handleUploadSelection}
-            tabIndex={-1}
-          />
-          <input
-            ref={libraryImageInput}
-            className="file-input-hidden"
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleLibraryImageUpload}
-            tabIndex={-1}
-          />
-          <input
-            ref={libraryFolderInput}
-            className="file-input-hidden"
-            type="file"
-            multiple
-            onChange={handleLibraryFolderUpload}
             tabIndex={-1}
           />
           {/* Step 1: upload and configure. Hidden, not unmounted, while a room is being chosen. */}
@@ -1126,13 +1007,9 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           onClose={() => setIsLibraryOpen(false)}
           onSearchChange={setLibrarySearch}
           onSelectCollection={(collectionId) => {
-            setSelectedLibraryCollectionId(collectionId)
             const collection = collections.find((item) => item.id === collectionId)
             if (collection) void openCollection(collection)
           }}
-          onCreateCollection={createCollection}
-          onUploadImages={() => libraryImageInput.current?.click()}
-          onUploadFolder={() => libraryFolderInput.current?.click()}
           onSelectProduct={setSelectedLibraryProductId}
           onDeleteProduct={deleteLibraryProduct}
           onDeleteCollection={deleteLibraryCollection}

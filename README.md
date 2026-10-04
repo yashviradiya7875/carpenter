@@ -36,6 +36,8 @@ src/
 
 `app/App.tsx` renders every page inside the same shell: `AppHeader` (logo, credits, theme toggle, account menu) above the page content. Pages never render their own header, and never contain theme logic. They style themselves with semantic tokens, so light and dark work automatically. App-level state the header shows (credits, current view) lives in the shell. Pages report changes through callbacks such as `onCreditsChange`.
 
+Pages have their own URLs, handled in `app/useView.ts` with the History API (no router dependency): the studio at `/`, Files at `/files`, and the public share page at `/share/<token>`. The host must serve `index.html` for these paths; the nginx vhost in `deploy/` already does.
+
 Inside a feature:
 
 - `<Name>Page.tsx` owns screen state and layout; `components/` holds its presentational pieces.

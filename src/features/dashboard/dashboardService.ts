@@ -48,13 +48,11 @@ export async function getLastRenderCost(username: string, options: RequestOption
 
 // Shared with Files, which manages the same library.
 export {
-  createLaminateCollection,
   deleteCollection,
   deleteProduct,
   getProduct,
   listCollectionProducts,
   listLaminateCollections,
-  uploadLaminateProducts,
 } from '../../shared/catalog/catalogService'
 
 /* -------------------------------------------------------------------- rooms */
