@@ -25,7 +25,7 @@ import { Button, Dialog, Field, TextInput } from '../../shared/ui'
 shared/ui/
   tokens/        tokens.css (CSS custom properties) · tokens.ts (JS mirror: breakpoints, durations, z-index)
   styles/        base.css (document defaults, focus ring, .sr-only, motion) · index.css (imports tokens + base)
-  primitives/    single-purpose building blocks: Button (+ buttonClasses), Icon, Spinner, Field / TextInput / Select / Textarea
+  primitives/    single-purpose building blocks: Button (+ buttonClasses), Icon, Spinner, Skeleton, Field / TextInput / Select / Textarea
   components/    composed, with behavior: Alert, Dialog, ConfirmDialog, Menu, EmptyState, LoadingState, GeneratingLoader, Tabs, AnimatedGridPattern
   layout/        page structure: TopBar
   theme/         ThemeProvider, useTheme, ThemeToggle (light / dark)
@@ -88,7 +88,8 @@ Plain CSS: no animation library. Keyframes, enter utilities and the reduced-moti
 | Dialog | backdrop fades 150ms; panel rises 200ms; slides up as a sheet on phones (320ms). Closing via `open={false}`: backdrop fades and the panel sinks 6px in 150ms (the sheet slides back down, 200ms) | `Dialog` |
 | Menu | scales in from the trigger corner, 150ms | `Menu` |
 | Tooltip | fades and slides 4px after a 400ms hover delay | `Button tooltip` |
-| Loading | fades in after `--duration-loading-delay` (150ms), so fast responses never flash a spinner | `LoadingState` |
+| Loading | fades in after `--duration-loading-delay` (150ms), so fast responses never flash a spinner or placeholders | `LoadingState`, `SkeletonGroup` |
+| Loading placeholders | a soft band of light crosses each shape every 1.6s; still shapes under reduced motion | `Skeleton` |
 | Feedback and new content | fades up 4px, 200ms | `Alert`, `EmptyState`, field errors |
 | View change | fades in, 200ms | `.app-enter-fade` |
 | Content appearing in place (lists, panels, expanded groups) | fades up 4px, 200ms | `.app-enter` |
@@ -107,7 +108,8 @@ Animations use `backwards` fill, so an element's own `transform` applies once th
 | `Button` | Every clickable action | See [Button](#button) below. |
 | `Icon` | Inline SVG icons | `name`, optional `size`, `label` (omit = decorative). Inherits `currentColor`. |
 | `Spinner` | Indeterminate loading inside other UI | `size` sm/md/lg; pass `label` unless nearby text already says what is loading. |
-| `LoadingState` | A region whose content is loading | Spinner + visible message, `role="status"`. `compact` for one row in panels, dialogs and lists. |
+| `Skeleton` / `SkeletonText` / `SkeletonGroup` | Content that is loading and whose shape is known (lists, cards, images, fields) | `Skeleton` is one shape: `variant` text / block / circle, `width`, `height`, or a class. Give it the size of what it stands in for, ideally by placing it inside the real component's own layout classes (a row, a card), so nothing moves when the content arrives. `SkeletonText` is a few lines of text. Wrap a set in `SkeletonGroup`: it announces `label` once (`role="status"`), hides the shapes from assistive technology, takes the content's layout class (`className`) or `stack`, and appears after the loading delay. Colors from `--color-skeleton` / `--color-skeleton-sheen`. Show placeholders only while something is really loading. |
+| `LoadingState` | A region whose content is loading and has no predictable shape | Spinner + visible message, `role="status"`. `compact` for one row in panels, dialogs and lists. |
 | `GeneratingLoader` | Long AI operations (renders, generations) that take over a whole region | Animated orb around a word (`label`, default "Generating"). `message` for one status line, or `messages` + `messageInterval` to step through lines over time (the last one stays; they describe activity, so never promise "almost done"). `progress` (`value`, `max`, `label`) only for measured progress; omit it and the orb is the indeterminate state. `hint`, `showElapsed` (real elapsed time), `size` md/lg. Status is a `role="status"` region; the clock sits outside it. Colors from `--effect-loader-*` per theme. Under reduced motion nothing rotates; the glow keeps a slow fade. |
 | `Menu` + `MenuItem` / `MenuLabel` / `MenuSeparator` | Dropdown action menus (row actions, account menu) | See [Menu](#menu) below. |
 | `Tabs` | Switching what one panel shows (categories, filters) | `tabs` (`id`, `label`, optional `count`), `value`, `onChange`, `label`, `panelId`. One tab stop; arrow keys / Home / End move and select. Scrolls sideways when crowded. Give the controlled element `role="tabpanel"`. |

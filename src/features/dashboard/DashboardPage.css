@@ -302,9 +302,24 @@
   scale: 1;
 }
 
-.generation-result-spinner {
+/* Holds the render's place while its image loads; the image takes no room until then. */
+.generation-result-loading {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.generation-result-skeleton {
+  width: min(100%, 640px);
+  aspect-ratio: 4 / 3;
+  max-height: 100%;
+  border-radius: var(--radius-lg);
+}
+
+.generation-result-frame img:not(.is-loaded) {
   position: absolute;
-  color: var(--color-accent-muted);
+  visibility: hidden;
 }
 
 .generation-result-missing {
@@ -1153,8 +1168,33 @@
   color: var(--color-accent-muted);
 }
 
-.library-loading {
-  flex: 1;
+/* Library placeholders: the card and row frames themselves, with shapes the size of their contents. */
+.library-product.is-skeleton,
+.collection-row.is-skeleton {
+  cursor: default;
+}
+
+.library-product.is-skeleton:hover {
+  border-color: var(--color-line);
+  box-shadow: none;
+}
+
+.library-skeleton-image {
+  width: 100%;
+  aspect-ratio: 1.15;
+  border-radius: 8px;
+}
+
+.library-skeleton-mark {
+  border-radius: 8px;
+}
+
+.library-skeleton-title {
+  margin: 8px 0 12px;
+}
+
+.collection-row.is-skeleton > span:nth-child(2) {
+  gap: 8px;
 }
 
 .library-message {

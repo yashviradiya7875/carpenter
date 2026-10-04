@@ -80,3 +80,21 @@
     height: 40px;
   }
 }
+
+/* While the session is restored: placeholders the size of the credit balance and the avatar. */
+.app-header-skeleton-credits {
+  width: 96px;
+  height: 10px;
+}
+
+.profile-skeleton {
+  width: 28px;
+  height: 28px;
+}
+
+@media (pointer: coarse) {
+  .profile-skeleton {
+    width: 40px;
+    height: 40px;
+  }
+}

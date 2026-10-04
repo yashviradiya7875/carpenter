@@ -142,6 +142,10 @@
   --effect-grid-square: var(--palette-violet-300);
   --effect-grid-opacity: 0.07;
 
+  /* Skeleton placeholders: a faint neutral shape with a slightly brighter band passing over it */
+  --color-skeleton: rgba(226, 214, 244, 0.07);
+  --color-skeleton-sheen: rgba(255, 255, 255, 0.07);
+
   /* Generating loader (GeneratingLoader): white rim light over a faint lavender depth */
   --effect-loader-rim: rgba(255, 255, 255, 0.8);
   --effect-loader-glow: rgba(193, 140, 245, 0.34);
@@ -388,6 +392,9 @@
   --effect-grid-line: rgba(40, 30, 70, 0.06);
   --effect-grid-square: #9b84d6;
   --effect-grid-opacity: 0.08;
+
+  --color-skeleton: rgba(40, 30, 70, 0.075);
+  --color-skeleton-sheen: rgba(255, 255, 255, 0.75);
 
   /* White light is invisible on white: the rim becomes a soft accent line instead */
   --effect-loader-rim: rgba(101, 68, 173, 0.5);

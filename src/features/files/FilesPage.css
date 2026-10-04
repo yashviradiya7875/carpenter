@@ -1243,3 +1243,61 @@
     --app-button-height: 36px;
   }
 }
+
+/* ----------------------------------------------------------------- loading */
+
+/* Rows that are still loading keep the row's frame in every view; they just don't react. */
+.files-row.is-skeleton {
+  pointer-events: none;
+}
+
+.files-row.is-skeleton .files-item-name {
+  cursor: default;
+}
+
+.files-row.is-skeleton .files-item-icon {
+  background: none;
+}
+
+.files-skeleton-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.files-row.is-skeleton .files-item-name > span:last-child {
+  gap: 7px;
+}
+
+/* The second line (and the columns) exist only in the list view, like the text they stand for. */
+.files-browser.view-large .files-skeleton-detail,
+.files-browser.view-small .files-skeleton-detail {
+  display: none;
+}
+
+.files-tree-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 9px var(--space-2);
+}
+
+.files-activity-skeleton {
+  gap: var(--space-5);
+  padding-top: var(--space-3);
+}
+
+.files-dialog-skeleton-heading {
+  margin-top: var(--space-2);
+}
+
+.shared-resource-skeleton {
+  width: 100%;
+}
+
+.shared-resource-skeleton-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 65vh;
+  border-radius: 7px;
+}

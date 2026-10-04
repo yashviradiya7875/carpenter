@@ -10,15 +10,17 @@ import {
   Dialog,
   EmptyState,
   Field,
-  LoadingState,
   MenuItem,
   MenuSeparator,
   Select,
+  Skeleton,
+  SkeletonGroup,
+  SkeletonText,
   TextInput,
   useTheme,
 } from '../../shared/ui'
 import { Mark } from '../../shared/components/Mark'
-import { FileRow } from './components/FileRow'
+import { FileRow, FileRowSkeleton } from './components/FileRow'
 import { FilesSidebar, type FilesNavItem, type FilesSection } from './components/FilesSidebar'
 import { DriveFolderTree } from './components/FolderTree'
 import { canEdit, canManage, isShared } from './filesPermissions'
@@ -950,7 +952,9 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
             </div>
             <div className="files-browser-scroll">
               {isListLoading ? (
-                <LoadingState label={`Loading ${sectionLabel.toLowerCase()}…`} />
+                <SkeletonGroup label={`Loading ${sectionLabel.toLowerCase()}…`} className="files-list">
+                  {Array.from({ length: 8 }, (_, index) => <FileRowSkeleton key={index} index={index} />)}
+                </SkeletonGroup>
               ) : itemCount ? (
                 // Keyed by location, so moving to another section or folder replays the enter animation.
                 <div className="files-list app-enter" key={`${section}:${currentFolderId ?? ''}:${openCollection?.id ?? ''}`}>
@@ -976,7 +980,11 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
           {isActivityOpen && isDriveSection ? (
             <aside className="files-activity-panel app-enter-end" aria-label="Recent activity">
               <header><h2>Activity</h2><Button variant="ghost" size="sm" iconOnly icon="close" onClick={() => setIsActivityOpen(false)} aria-label="Close activity" /></header>
-              {isLoadingActivity ? <LoadingState compact label="Loading activity…" /> : activity.length ? (
+              {isLoadingActivity ? (
+                <SkeletonGroup label="Loading activity…" className="files-activity-skeleton" stack>
+                  {Array.from({ length: 3 }, (_, index) => <SkeletonText key={index} lines={3} />)}
+                </SkeletonGroup>
+              ) : activity.length ? (
                 <ul>
                   {activity.map((item, index) => (
                     <li key={getString(item, 'id', 'activityId') ?? `activity-${index}`}>
@@ -1034,7 +1042,12 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
             </>
           )}
         >
-          {isLoadingMoveFolders ? <LoadingState compact label="Loading folders…" /> : (
+          {isLoadingMoveFolders ? (
+            <SkeletonGroup label="Loading folders…" stack>
+              <Skeleton variant="text" width={84} />
+              <Skeleton height={38} />
+            </SkeletonGroup>
+          ) : (
             <Field label="Destination">
               <Select autoFocus value={moveDestination} onChange={(event) => setMoveDestination(event.target.value)}>
                 <option value="">My Files</option>
@@ -1095,7 +1108,15 @@ export function FilesPage({ account, onBack }: FilesPageProps) {
             </>
           )}
         >
-          {isLoadingShares ? <LoadingState compact label="Loading sharing…" /> : (
+          {isLoadingShares ? (
+            <SkeletonGroup label="Loading sharing…" stack>
+              <Skeleton variant="text" width={72} />
+              <Skeleton height={38} />
+              <Skeleton variant="text" width={132} className="files-dialog-skeleton-heading" />
+              <SkeletonText lines={2} />
+              <Skeleton height={38} />
+            </SkeletonGroup>
+          ) : (
             <>
               {canManage(shareTarget.myRole) ? (
                 <Field label="Visibility">

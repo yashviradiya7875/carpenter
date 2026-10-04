@@ -164,6 +164,25 @@
   opacity: 1;
 }
 
+/* Holds the photo's place while it loads; the photo itself takes no room until then. */
+.placement-loading {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.placement-skeleton {
+  width: min(100%, 560px);
+  aspect-ratio: 4 / 3;
+  max-height: var(--placement-photo-max-height, min(48vh, 520px));
+  border-radius: var(--radius-lg);
+}
+
+.placement-canvas:not(.is-ready) {
+  position: absolute;
+  visibility: hidden;
+}
+
 /* The host can set --placement-photo-max-height to what its layout leaves free, so the whole photo stays in view. */
 .placement-canvas img {
   display: block;

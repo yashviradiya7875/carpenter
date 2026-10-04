@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, ConfirmDialog, Dialog, EmptyState, LoadingState, Menu, MenuItem, TextInput } from '../../../shared/ui'
+import { Alert, Button, ConfirmDialog, Dialog, EmptyState, Menu, MenuItem, Skeleton, SkeletonGroup, TextInput } from '../../../shared/ui'
 import { Mark } from '../../../shared/components/Mark'
 import type { Collection, Product } from '../dashboardTypes'
 
@@ -74,6 +74,18 @@ export function LibraryDialog({
     if (deleted) setDeletionTarget(null)
   }
 
+  // Laminates that are still loading: the product card's own frame, six to a first screen.
+  const productSkeleton = (
+    <SkeletonGroup label="Loading laminates…" className="library-grid">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div className="library-product is-skeleton" key={index}>
+          <Skeleton className="library-skeleton-image" />
+          <Skeleton variant="text" width="68%" />
+        </div>
+      ))}
+    </SkeletonGroup>
+  )
+
   const isDeleting = deletionTarget?.type === 'product'
     ? deletingProductId === deletionTarget.item.id
     : deletionTarget?.type === 'collection' && deletingCollectionId === deletionTarget.item.id
@@ -84,7 +96,9 @@ export function LibraryDialog({
         open
         onClose={onClose}
         title={activeCollection?.name ?? 'Laminate collections'}
-        description={activeCollection ? `${activeCollection.productCount ?? 0} laminates` : `${collections.length} collections`}
+        description={activeCollection
+          ? `${activeCollection.productCount ?? 0} laminates`
+          : isLoading && !collections.length ? 'Loading collections…' : `${collections.length} collections`}
         size="lg"
         className="library-dialog"
         footer={(
@@ -112,8 +126,24 @@ export function LibraryDialog({
 
         {error && !deletionTarget ? <Alert tone="error" className="library-message">{error}</Alert> : null}
         {notice ? <Alert tone="success" className="library-message">{notice}</Alert> : null}
-        {isLoading ? (
-          <LoadingState label="Loading materials…" className="library-loading" />
+        {isLoading && !collections.length ? (
+          // First load: nothing to show yet, so the whole browser is placeholders.
+          <div className="library-body">
+            <div className="library-browser">
+              <SkeletonGroup label="Loading collections…" className="library-folders">
+                <Skeleton variant="text" width={84} className="library-skeleton-title" />
+                <div className="collection-list">
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <div className="collection-row is-skeleton" key={index}>
+                      <Skeleton width={36} height={36} className="library-skeleton-mark" />
+                      <span><Skeleton variant="text" width={[118, 92, 132, 104][index]} /><Skeleton variant="text" width={64} /></span>
+                    </div>
+                  ))}
+                </div>
+              </SkeletonGroup>
+              <div className="library-folder-content">{productSkeleton}</div>
+            </div>
+          </div>
         ) : (
           <div className="library-body">
             {collections.length ? (
@@ -163,7 +193,8 @@ export function LibraryDialog({
                         <Mark name="folder" />
                         <span><strong>{activeCollection.name}</strong><small>{activeCollection.productCount ?? 0} materials</small></span>
                       </div>
-                      {displayedProducts.length ? (
+                      {/* Opening a collection keeps the list of collections and loads only its laminates. */}
+                      {isLoading ? productSkeleton : displayedProducts.length ? (
                         <div className="library-grid app-enter">
                           {displayedProducts.map((product) => (
                             <article className="library-product-card" key={product.id}>

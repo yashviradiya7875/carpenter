@@ -1,0 +1,55 @@
+/* Placeholder shapes for loading content. Colors come from theme tokens (--color-skeleton*). */
+.app-skeleton {
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-skeleton);
+  /* A soft band of light crossing the shape; the base color alone when motion is reduced. */
+  background-image: linear-gradient(100deg, transparent 25%, var(--color-skeleton-sheen) 50%, transparent 75%);
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  background-position: 150% 0;
+  animation: app-skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+/* One line of text: the height of its letters, not of the whole line. */
+.app-skeleton--text {
+  height: 0.72em;
+  min-height: 8px;
+  border-radius: var(--radius-full);
+}
+
+.app-skeleton--circle {
+  border-radius: 50%;
+}
+
+.app-skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Appears after a short delay, like LoadingState, so fast responses never flash placeholders. */
+.app-skeleton-group {
+  animation: app-fade-in var(--duration-base) var(--ease-standard) var(--duration-loading-delay) backwards;
+}
+
+.app-skeleton-group--stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+@keyframes app-skeleton-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+
+/* Reduced motion: still shapes, no moving light. Beats the global near-zero duration rule. */
+@media (prefers-reduced-motion: reduce) {
+  .app-skeleton {
+    background-image: none;
+    animation: none !important;
+  }
+}

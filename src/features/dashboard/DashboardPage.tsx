@@ -135,7 +135,8 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const roomStep = useRef<HTMLElement>(null)
   const stage = useRef<HTMLElement>(null)
   const generateButton = useRef<HTMLButtonElement>(null)
-  const [shareStats, setShareStats] = useState<ShareStats | null>(null)
+  // `undefined` while loading, `null` when the stats couldn't be loaded.
+  const [shareStats, setShareStats] = useState<ShareStats | null | undefined>(undefined)
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
   const overviewTrigger = useRef<HTMLButtonElement>(null)
   const overviewCollapse = useRef<HTMLButtonElement>(null)
@@ -957,9 +958,9 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           </header>
           <div className="overview-body">
             <div className="overview-stats">
-              <OverviewStat label="Share attempts" value={shareStats ? String(shareStats.total ?? 0) : '—'} />
-              <OverviewStat label="Clients" value={shareStats ? String(shareStats.uniqueClients ?? 0) : '—'} />
-              <OverviewStat label="Follow-ups" value={shareStats ? String(dueFollowUps) : '—'} />
+              <OverviewStat label="Share attempts" value={shareStats ? String(shareStats.total ?? 0) : '—'} isLoading={shareStats === undefined} />
+              <OverviewStat label="Clients" value={shareStats ? String(shareStats.uniqueClients ?? 0) : '—'} isLoading={shareStats === undefined} />
+              <OverviewStat label="Follow-ups" value={shareStats ? String(dueFollowUps) : '—'} isLoading={shareStats === undefined} />
             </div>
             {render?.imageUrl ? (
               <article className="render-result">

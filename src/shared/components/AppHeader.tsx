@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { roleLabel } from '../auth/account'
 import type { AuthAccount } from '../auth/types'
-import { Menu, MenuItem, MenuLabel, MenuSeparator, ThemeToggle, TopBar } from '../ui'
+import { Menu, MenuItem, MenuLabel, MenuSeparator, Skeleton, ThemeToggle, TopBar } from '../ui'
 import { Brand } from './Brand'
 import { Mark } from './Mark'
 import './AppHeader.css'
@@ -15,6 +15,8 @@ export type AppHeaderProps = {
   onHome?: () => void
   /** Extra actions before the theme toggle, e.g. a link on public pages. */
   actions?: ReactNode
+  /** The account is still being restored: placeholders hold the place of the credits and the account menu. */
+  isLoading?: boolean
 }
 
 function initials(name: string): string {
@@ -22,7 +24,7 @@ function initials(name: string): string {
 }
 
 /** The application's single global header. The app shell renders it once, above every page. */
-export function AppHeader({ account, credits, onSignOut, onHome, actions }: AppHeaderProps) {
+export function AppHeader({ account, credits, onSignOut, onHome, actions, isLoading = false }: AppHeaderProps) {
   const userName = account ? account.displayName || account.username : ''
 
   return (
@@ -44,7 +46,9 @@ export function AppHeader({ account, credits, onSignOut, onHome, actions }: AppH
               <span className="credit-balance-label">Credits left</span>
             </div>
           ) : null}
+          {isLoading ? <Skeleton variant="text" className="app-header-skeleton-credits" /> : null}
           <ThemeToggle />
+          {isLoading ? <Skeleton variant="circle" className="profile-skeleton" /> : null}
           {account ? (
             <Menu
               label="Account"

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Mark } from '../../../shared/components/Mark'
-import { Button, Menu, type IconName } from '../../../shared/ui'
+import { Button, Menu, Skeleton, type IconName } from '../../../shared/ui'
 import { formatDate } from '../filesUtils'
 
 export type FileRowProps = {
@@ -64,5 +64,28 @@ export function FileRow({ name, kind, icon, imageUrl, detail, updatedAt, meta, i
         </div>
       ) : null}
     </article>
+  )
+}
+
+// Name lengths that vary from row to row, so a loading list doesn't look like a table of bars.
+const SKELETON_NAME_WIDTHS = [168, 124, 196, 142]
+
+/**
+ * A row that is still loading. It uses the row's own layout classes, so it has the right
+ * size in the list view and in both grid views.
+ */
+export function FileRowSkeleton({ index = 0 }: { index?: number }) {
+  return (
+    <div className="files-row is-skeleton">
+      <span className="files-item-name">
+        <span className="files-item-icon"><Skeleton className="files-skeleton-thumb" /></span>
+        <span>
+          <Skeleton variant="text" width={SKELETON_NAME_WIDTHS[index % SKELETON_NAME_WIDTHS.length]} />
+          <Skeleton variant="text" width={72} className="files-skeleton-detail" />
+        </span>
+      </span>
+      <span className="files-updated"><Skeleton variant="text" width={76} /></span>
+      <span className="files-role"><Skeleton variant="text" width={44} /></span>
+    </div>
   )
 }

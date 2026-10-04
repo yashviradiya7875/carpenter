@@ -6,7 +6,7 @@ import { FilesPage } from '../features/files/FilesPage'
 import { SharedResourcePage } from '../features/files/SharedResourcePage'
 import type { AuthAccount } from '../shared/auth/types'
 import { AppHeader } from '../shared/components/AppHeader'
-import { Button, buttonClasses, EmptyState, LoadingState } from '../shared/ui'
+import { Button, buttonClasses, EmptyState, Skeleton, SkeletonGroup } from '../shared/ui'
 import { shareTokenFromLocation, useView } from './useView'
 import './App.css'
 
@@ -64,18 +64,42 @@ function NotFoundPage({ onHome }: { onHome: () => void }) {
 function SignedInApp() {
   const { account, isRestoring, restoreError, signIn, signOut } = useSession()
 
-  if (isRestoring) {
-    return (
-      <main className="checking-screen app-enter-fade">
-        <LoadingState label="Restoring your workspace…" />
-      </main>
-    )
-  }
+  if (isRestoring) return <RestoringShell />
 
   if (!account) return <AuthPage onSignedIn={signIn} initialError={restoreError} />
 
   // Keyed by account so a different sign-in starts with fresh workspace state.
   return <Workspace key={account.username} account={account} onSignOut={signOut} />
+}
+
+/** While a stored session is checked: the app's frame, with the shape of the page that is about to open. */
+function RestoringShell() {
+  const [view] = useView()
+
+  return (
+    <div className="app-shell">
+      <AppHeader isLoading />
+      <main className="restoring-page">
+        {view === 'files' ? (
+          <SkeletonGroup label="Restoring your workspace…" className="restoring-files">
+            <div className="restoring-files-sidebar">
+              {Array.from({ length: 9 }, (_, index) => <Skeleton key={index} height={30} />)}
+            </div>
+            <div className="restoring-files-main">
+              <Skeleton width={220} height={32} />
+              <Skeleton className="restoring-files-list" />
+            </div>
+          </SkeletonGroup>
+        ) : (
+          <SkeletonGroup label="Restoring your workspace…" className="restoring-studio">
+            <Skeleton className="restoring-studio-title" />
+            <Skeleton variant="text" width={280} />
+            <Skeleton className="restoring-studio-composer" />
+          </SkeletonGroup>
+        )}
+      </main>
+    </div>
+  )
 }
 
 function Workspace({ account, onSignOut }: { account: AuthAccount; onSignOut: () => void }) {

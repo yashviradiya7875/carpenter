@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Mark } from '../../shared/components/Mark'
-import { buttonClasses, EmptyState, LoadingState } from '../../shared/ui'
+import { buttonClasses, EmptyState, Skeleton, SkeletonGroup } from '../../shared/ui'
 import { getSharedDriveResource, getString, type DriveResourceType } from './filesService'
 import { errorMessage } from './filesUtils'
 import './FilesPage.css'
@@ -38,7 +38,14 @@ export function SharedResourcePage({ token }: { token: string }) {
   return (
     <main className="files-page shared-files-page app-enter-fade">
       <section className="shared-resource">
-        {isLoading ? <LoadingState label="Loading shared item…" /> : error ? (
+        {isLoading ? (
+          <SkeletonGroup label="Loading shared item…" className="shared-resource-skeleton" stack>
+            <Skeleton width={38} height={38} />
+            <Skeleton variant="text" width={148} />
+            <Skeleton width="56%" height={30} />
+            <Skeleton className="shared-resource-skeleton-image" />
+          </SkeletonGroup>
+        ) : error ? (
           <EmptyState
             icon="alert"
             headingLevel={1}

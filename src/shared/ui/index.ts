@@ -16,6 +16,15 @@ export {
   type TextInputProps,
 } from './primitives/Field'
 export { Icon, type IconName, type IconProps } from './primitives/Icon'
+export {
+  Skeleton,
+  SkeletonGroup,
+  SkeletonText,
+  type SkeletonGroupProps,
+  type SkeletonProps,
+  type SkeletonTextProps,
+  type SkeletonVariant,
+} from './primitives/Skeleton'
 export { Spinner, type SpinnerProps, type SpinnerSize } from './primitives/Spinner'
 
 // Components: composed from primitives, with behavior

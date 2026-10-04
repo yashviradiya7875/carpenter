@@ -1,5 +1,5 @@
-import { useId, useRef, useState, type ChangeEvent, type ReactNode, type Ref } from 'react'
-import { Alert, Button, cx, EmptyState, Icon, LoadingState, Tabs } from '../ui'
+import { useId, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode, type Ref } from 'react'
+import { Alert, Button, cx, EmptyState, Icon, Skeleton, SkeletonGroup, Tabs } from '../ui'
 import { StepPanel } from './StepPanel'
 import { fileToRoomImage, type CustomRoom, type RoomCategory, type RoomScene, type RoomSelection } from './roomImage'
 import './RoomSelect.css'
@@ -35,10 +35,14 @@ export type RoomSelectProps = {
   className?: string
 }
 
+/** Tiles shown while the room library loads; about two rows of the grid. */
+const SKELETON_TILES = 8
+
 /**
- * Room selection step for a generation flow: pick a predefined room by category, or
- * upload / photograph a custom one. Renders inline, inside the page that hosts the flow.
- * Purely presentational — the caller supplies the library and receives the confirmed selection.
+ * Room selection step for a generation flow. The user's own room comes first: a featured
+ * card to upload, drop or photograph it. The predefined rooms follow, by category, as the
+ * alternative. Renders inline, inside the page that hosts the flow. Purely presentational:
+ * the caller supplies the library and receives the confirmed selection.
  */
 export function RoomSelect({
   onBack,
@@ -55,16 +59,18 @@ export function RoomSelect({
   onSkip,
   skipLabel = 'Continue without a room',
   title = 'Choose where it lives',
-  description = 'Pick a room for your laminate, or upload a photo of your own space.',
+  description = 'Upload a photo of your own space, or pick a room from the library.',
   hidden = false,
   ref,
   className,
 }: RoomSelectProps) {
   const panelId = useId()
+  const customTitleId = useId()
   const [selection, setSelection] = useState<RoomSelection | null>(initialSelection)
   const [customRoom, setCustomRoom] = useState<CustomRoom | null>(initialSelection?.kind === 'custom' ? initialSelection.room : null)
   const [activeCategory, setActiveCategory] = useState(initialSelection?.kind === 'scene' ? initialSelection.scene.category : '')
   const [isPreparing, setIsPreparing] = useState(false)
+  const [isDropActive, setIsDropActive] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const uploadInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
@@ -74,10 +80,8 @@ export function RoomSelect({
   const visibleScenes = categories.length ? scenes.filter((scene) => scene.category === category) : scenes
   const hasLibraryRooms = scenes.length > 0
 
-  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0]
-    event.currentTarget.value = ''
-    if (!file) return
+  const applyRoomPhoto = async (file: File | undefined) => {
+    if (!file || isPreparing) return
     setUploadError('')
     setIsPreparing(true)
     try {
@@ -89,6 +93,30 @@ export function RoomSelect({
     } finally {
       setIsPreparing(false)
     }
+  }
+
+  const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    void applyRoomPhoto(file)
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setIsDropActive(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget as Node)) setIsDropActive(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.files.length) return
+    event.preventDefault()
+    setIsDropActive(false)
+    void applyRoomPhoto(event.dataTransfer.files[0])
   }
 
   const isCustomSelected = selection?.kind === 'custom'
@@ -122,22 +150,43 @@ export function RoomSelect({
         </>
       )}
     >
-      <input ref={uploadInput} className="room-select-input" type="file" accept="image/*" onChange={(event) => void handleFile(event)} tabIndex={-1} />
+      <input ref={uploadInput} className="room-select-input" type="file" accept="image/*" onChange={handleFile} tabIndex={-1} />
       {/* `capture` opens the rear camera on phones; elsewhere it behaves like a normal picker. */}
-      <input ref={cameraInput} className="room-select-input" type="file" accept="image/*" capture="environment" onChange={(event) => void handleFile(event)} tabIndex={-1} />
+      <input ref={cameraInput} className="room-select-input" type="file" accept="image/*" capture="environment" onChange={handleFile} tabIndex={-1} />
 
-      <div className="room-select-toolbar">
-        {categories.length ? (
-          <Tabs
-            className="room-select-tabs"
-            label="Room categories"
-            panelId={panelId}
-            value={category}
-            onChange={setActiveCategory}
-            tabs={categories.map((item) => ({ id: item.id, label: item.label }))}
-          />
-        ) : <span />}
-        <div className="room-select-upload">
+      {/* The user's own room: the first and most prominent choice. Also a drop target for a photo. */}
+      <div
+        className={cx('room-custom', customRoom && 'has-room', isCustomSelected && 'is-selected', isDropActive && 'is-drop-active')}
+        role="group"
+        aria-labelledby={customTitleId}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {customRoom ? (
+          <button
+            type="button"
+            className="room-custom-preview"
+            aria-pressed={isCustomSelected}
+            aria-label={isCustomSelected ? 'Your room, selected' : 'Select your room'}
+            onClick={() => setSelection({ kind: 'custom', room: customRoom })}
+          >
+            <img src={customRoom.previewUrl} alt="" />
+            {isCustomSelected ? <span className="room-tile-check"><Icon name="check" /></span> : null}
+          </button>
+        ) : (
+          <span className="room-custom-icon" aria-hidden="true"><Icon name="camera" /></span>
+        )}
+        <div className="room-custom-copy">
+          <strong id={customTitleId}>{customRoom ? 'Your room' : 'Upload your own room'}</strong>
+          <span>
+            {isDropActive ? 'Drop the photo to use it.'
+              : customRoom
+                ? isCustomSelected ? 'Selected. The render will be made in your photo.' : 'Select it to render in your photo, or replace it.'
+                : 'Use a photo of the actual space for a more accurate visualization. Drop it here or choose a file.'}
+          </span>
+        </div>
+        <div className="room-custom-actions">
           <Button
             className="room-select-camera"
             size="sm"
@@ -149,6 +198,7 @@ export function RoomSelect({
             Take photo
           </Button>
           <Button
+            variant={customRoom ? 'secondary' : 'primary'}
             size="sm"
             shape="pill"
             icon="upload"
@@ -156,30 +206,46 @@ export function RoomSelect({
             loadingLabel="Preparing photo…"
             onClick={() => uploadInput.current?.click()}
           >
-            Upload custom room
+            {customRoom ? 'Replace photo' : 'Upload photo'}
           </Button>
         </div>
       </div>
 
       {uploadError ? <Alert tone="error" className="room-select-alert" onDismiss={() => setUploadError('')}>{uploadError}</Alert> : null}
 
+      {/* The library: the secondary choice, by category. */}
+      <div className="room-select-toolbar">
+        <span className="room-select-library-label">Or choose a room from the library</span>
+        {categories.length ? (
+          <Tabs
+            className="room-select-tabs"
+            label="Room categories"
+            panelId={panelId}
+            value={category}
+            onChange={setActiveCategory}
+            tabs={categories.map((item) => ({ id: item.id, label: item.label }))}
+          />
+        ) : isLoading ? (
+          <span className="room-select-tabs-skeleton" aria-hidden="true">
+            <Skeleton variant="text" width={72} /><Skeleton variant="text" width={56} /><Skeleton variant="text" width={64} />
+          </span>
+        ) : null}
+      </div>
+
       <div className="room-select-panel" id={panelId} role={categories.length ? 'tabpanel' : undefined} aria-label={categories.length ? undefined : 'Rooms'}>
         {isLoading ? (
-          <LoadingState label="Loading rooms…" />
+          <SkeletonGroup label="Loading rooms…" className="room-grid">
+            {Array.from({ length: SKELETON_TILES }, (_, index) => (
+              <div className="room-tile is-skeleton" key={index}>
+                <Skeleton className="room-tile-skeleton-media" />
+                <Skeleton variant="text" className="room-tile-skeleton-name" />
+              </div>
+            ))}
+          </SkeletonGroup>
         ) : (
           <>
-            {customRoom || visibleScenes.length ? (
-              <ul className="room-grid">
-                {customRoom ? (
-                  <li>
-                    <RoomTile
-                      name="Your room"
-                      imageUrl={customRoom.previewUrl}
-                      selected={isCustomSelected}
-                      onSelect={() => setSelection({ kind: 'custom', room: customRoom })}
-                    />
-                  </li>
-                ) : null}
+            {visibleScenes.length ? (
+              <ul className="room-grid app-enter">
                 {visibleScenes.map((scene) => (
                   <li key={scene.id}>
                     <RoomTile
@@ -216,7 +282,7 @@ export function RoomSelect({
                 description="Upload a photo of your own room to continue."
                 actions={onSkip ? <Button variant="ghost" shape="pill" onClick={onSkip}>{skipLabel}</Button> : undefined}
               />
-            ) : !visibleScenes.length && !customRoom ? (
+            ) : !visibleScenes.length ? (
               <EmptyState compact icon="image" headingLevel={3} title="No rooms in this category" description="Choose another category or upload your own room." />
             ) : null}
           </>

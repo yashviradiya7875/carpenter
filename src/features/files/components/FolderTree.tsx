@@ -1,4 +1,5 @@
 import { Mark } from '../../../shared/components/Mark'
+import { Skeleton, SkeletonGroup } from '../../../shared/ui'
 import type { DriveFolder } from '../filesService'
 
 type DriveFolderTreeProps = {
@@ -17,7 +18,11 @@ export function DriveFolderTree({ folders, currentFolderId, activePath, expanded
   return (
     <nav className="files-folder-tree-panel" aria-label="Folders">
       <div className="files-tree-heading">Folders</div>
-      {isLoading ? <div className="files-tree-state" role="status">Loading folders…</div> : rootFolders.length ? (
+      {isLoading ? (
+        <SkeletonGroup label="Loading folders…" className="files-tree-skeleton">
+          {['72%', '54%', '64%', '46%'].map((width) => <Skeleton key={width} variant="text" width={width} />)}
+        </SkeletonGroup>
+      ) : rootFolders.length ? (
         <ul className="files-tree">
           {rootFolders.map((folder) => (
             <DriveFolderTreeBranch

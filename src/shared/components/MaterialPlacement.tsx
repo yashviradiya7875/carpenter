@@ -1,5 +1,5 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type Ref } from 'react'
-import { Alert, Button, cx, EmptyState, Icon, LoadingState } from '../ui'
+import { Alert, Button, cx, EmptyState, Icon, Skeleton, SkeletonGroup } from '../ui'
 import { StepPanel } from './StepPanel'
 import './MaterialPlacement.css'
 
@@ -358,7 +358,11 @@ export function MaterialPlacement({
           />
         ) : (
           <>
-            {imageStatus === 'loading' ? <LoadingState compact label="Loading the room…" /> : null}
+            {imageStatus === 'loading' ? (
+              <SkeletonGroup label="Loading the room…" className="placement-loading">
+                <Skeleton className="placement-skeleton" />
+              </SkeletonGroup>
+            ) : null}
             <div className={cx('placement-canvas', imageStatus === 'ready' && 'is-ready')}>
               <img
                 src={roomImageUrl}

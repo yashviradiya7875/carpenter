@@ -1,5 +1,5 @@
 import { useState, type Ref } from 'react'
-import { Alert, Button, cx, EmptyState, GeneratingLoader, Icon, Spinner } from '../../../shared/ui'
+import { Alert, Button, cx, EmptyState, GeneratingLoader, Icon, Skeleton, SkeletonGroup } from '../../../shared/ui'
 import type { GenerationResult } from '../dashboardService'
 
 export type GenerationStageView = 'loading' | 'result' | 'error'
@@ -194,7 +194,11 @@ function RenderImage({ src }: { src: string }) {
   if (status === 'failed') return <p className="generation-result-missing">The preview couldn’t be loaded.</p>
   return (
     <>
-      {status === 'loading' ? <Spinner className="generation-result-spinner" label="Loading your render" /> : null}
+      {status === 'loading' ? (
+        <SkeletonGroup label="Loading your render" className="generation-result-loading">
+          <Skeleton className="generation-result-skeleton" />
+        </SkeletonGroup>
+      ) : null}
       <img
         className={cx(status === 'loaded' && 'is-loaded')}
         src={src}
