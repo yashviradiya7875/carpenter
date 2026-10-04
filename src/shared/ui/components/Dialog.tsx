@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { cx } from '../utils/cx'
 import { Icon, type IconName } from '../primitives/Icon'
@@ -8,6 +8,10 @@ import './Dialog.css'
 export type DialogSize = 'sm' | 'md' | 'lg'
 
 export type DialogProps = {
+  /**
+   * Keep the dialog mounted and switch this off to close it with its exit animation.
+   * Unmounting it instead (`{isOpen ? <Dialog open … /> : null}`) closes at once.
+   */
   open: boolean
   /** Called on Escape, backdrop click and the close button (when dismissible). */
   onClose: () => void
@@ -51,12 +55,27 @@ function unlockScroll() {
   if (scrollLocks === 0) document.body.style.overflow = restoreOverflow
 }
 
+// How long to wait for the exit animation before unmounting anyway.
+const EXIT_FALLBACK_MS = 400
+
 export function Dialog(props: DialogProps) {
-  if (!props.open || typeof document === 'undefined') return null
-  return createPortal(<DialogPanel {...props} />, document.body)
+  // Stays present after `open` turns false, until the exit animation has finished.
+  const [isPresent, setIsPresent] = useState(props.open)
+  if (props.open && !isPresent) setIsPresent(true)
+
+  if (!isPresent || typeof document === 'undefined') return null
+  return createPortal(<DialogPanel {...props} closing={!props.open} onExited={() => setIsPresent(false)} />, document.body)
+}
+
+type DialogPanelProps = DialogProps & {
+  /** Playing the exit animation; `onExited` unmounts the panel when it ends. */
+  closing: boolean
+  onExited: () => void
 }
 
 function DialogPanel({
+  closing,
+  onExited,
   onClose,
   title,
   description,
@@ -72,17 +91,27 @@ function DialogPanel({
   initialFocusRef,
   onSubmit,
   className,
-}: DialogProps) {
+}: DialogPanelProps) {
   const titleId = useId()
   const descriptionId = useId()
   const panelRef = useRef<HTMLElement>(null)
   const onCloseRef = useRef(onClose)
   const dismissibleRef = useRef(dismissible)
+  const onExitedRef = useRef(onExited)
 
   useEffect(() => {
     onCloseRef.current = onClose
-    dismissibleRef.current = dismissible
+    // Nothing can be dismissed twice: a closing dialog ignores Escape.
+    dismissibleRef.current = dismissible && !closing
+    onExitedRef.current = onExited
   })
+
+  // Unmount even if the exit animation never reports its end.
+  useEffect(() => {
+    if (!closing) return
+    const timer = window.setTimeout(() => onExitedRef.current(), EXIT_FALLBACK_MS)
+    return () => window.clearTimeout(timer)
+  }, [closing])
 
   useEffect(() => {
     const token = Symbol('dialog')
@@ -128,6 +157,7 @@ function DialogPanel({
     'aria-labelledby': titleId,
     'aria-describedby': description ? descriptionId : undefined,
     tabIndex: -1,
+    inert: closing,
   } as const
 
   const content = (
@@ -151,10 +181,13 @@ function DialogPanel({
 
   return (
     <div
-      className="app-dialog-backdrop"
+      className={cx('app-dialog-backdrop', closing && 'is-closing')}
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && closeOnBackdrop && dismissible) onClose()
+        if (event.target === event.currentTarget && closeOnBackdrop && dismissible && !closing) onClose()
+      }}
+      onAnimationEnd={(event) => {
+        if (closing && event.target === event.currentTarget) onExited()
       }}
     >
       {onSubmit ? (

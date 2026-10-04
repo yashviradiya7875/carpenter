@@ -1,5 +1,5 @@
 import { useState, type Ref } from 'react'
-import { Button, cx, EmptyState, GeneratingLoader, Spinner } from '../../../shared/ui'
+import { Alert, Button, cx, EmptyState, GeneratingLoader, Spinner } from '../../../shared/ui'
 import type { GenerationResult } from '../dashboardService'
 
 export type GenerationStageView = 'loading' | 'result' | 'error'
@@ -7,6 +7,13 @@ export type GenerationStageView = 'loading' | 'result' | 'error'
 // What a render is doing, in order. The API reports no progress, so these advance on time
 // alone and the last one stays: none of them may claim the render is nearly finished.
 const RENDER_MESSAGES = ['Preparing your room', 'Applying your laminate', 'Rendering the visualization']
+
+/** Feedback for a result action (download, share, save), shown above the action bar. */
+export type ResultNotice = {
+  tone: 'success' | 'info' | 'error'
+  message: string
+  action?: { label: string; onClick: () => void }
+}
 
 type GenerationStageProps = {
   view: GenerationStageView
@@ -20,8 +27,14 @@ type GenerationStageProps = {
   onRetry: () => void
   /** Returns to the studio. A render that is still running keeps going. */
   onBack: () => void
-  /** Offered once several renders are ready. */
-  onOpenFiles?: () => void
+  /** Result actions. Download, Share and Save to Files are left out when the account isn't allowed them. */
+  onDownload?: () => void
+  isDownloading: boolean
+  onShare?: () => void
+  onSaveToFiles?: () => void
+  saveStatus: 'idle' | 'saving' | 'saved'
+  notice: ResultNotice | null
+  onDismissNotice: () => void
   ref?: Ref<HTMLElement>
 }
 
@@ -39,7 +52,13 @@ export function GenerationStage({
   canRetry,
   onRetry,
   onBack,
-  onOpenFiles,
+  onDownload,
+  isDownloading,
+  onShare,
+  onSaveToFiles,
+  saveStatus,
+  notice,
+  onDismissNotice,
   ref,
 }: GenerationStageProps) {
   return (
@@ -84,16 +103,46 @@ export function GenerationStage({
             <div className="generation-result-frame">
               {render?.imageUrl ? <RenderImage key={render.imageUrl} src={render.imageUrl} /> : null}
             </div>
+            {notice ? (
+              <Alert key={notice.message} tone={notice.tone} className="generation-result-notice" onDismiss={onDismissNotice}>
+                {notice.message}
+                {notice.action ? (
+                  <>
+                    {' '}
+                    <Button variant="link" size="xs" className="dashboard-message-action" onClick={notice.action.onClick}>{notice.action.label}</Button>
+                  </>
+                ) : null}
+              </Alert>
+            ) : null}
             <footer className="generation-result-bar">
               <div className="generation-result-copy">
                 <span>{completedRenders > 1 ? `Latest of ${completedRenders} renders` : 'Render ready'}</span>
                 <h2>{renderName || 'Carpenter preview'}</h2>
               </div>
               <div className="generation-result-actions">
-                {completedRenders > 1 && onOpenFiles ? (
-                  <Button size="sm" shape="pill" icon="folder" onClick={onOpenFiles}>Open Files</Button>
+                {onDownload ? (
+                  <Button size="sm" shape="pill" icon="download" loading={isDownloading} loadingLabel="Downloading…" onClick={onDownload}>
+                    Download
+                  </Button>
                 ) : null}
-                <Button variant="primary" size="sm" shape="pill" icon="spark" onClick={onBack}>Create another</Button>
+                {onShare ? (
+                  <Button variant="primary" size="sm" shape="pill" icon="share" onClick={onShare}>Share</Button>
+                ) : null}
+                {onSaveToFiles ? (
+                  <Button
+                    size="sm"
+                    shape="pill"
+                    icon={saveStatus === 'saved' ? 'check' : 'folder'}
+                    disabled={saveStatus === 'saved'}
+                    loading={saveStatus === 'saving'}
+                    loadingLabel="Saving…"
+                    onClick={onSaveToFiles}
+                  >
+                    {saveStatus === 'saved' ? 'Saved to Files' : 'Save to Files'}
+                  </Button>
+                ) : null}
+                {/* The main action when sharing isn't available to this account. */}
+                <Button variant={onShare ? 'secondary' : 'primary'} size="sm" shape="pill" icon="plus" onClick={onBack}>New render</Button>
               </div>
             </footer>
           </article>

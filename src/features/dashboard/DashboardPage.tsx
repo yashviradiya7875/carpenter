@@ -6,10 +6,11 @@ import { Mark } from '../../shared/components/Mark'
 import { RoomSelect } from '../../shared/components/RoomSelect'
 import type { RoomSelection } from '../../shared/components/roomImage'
 import { Alert, AnimatedGridPattern, Button, trapFocus } from '../../shared/ui'
-import { GenerationStage, type GenerationStageView } from './components/GenerationStage'
+import { GenerationStage, type GenerationStageView, type ResultNotice } from './components/GenerationStage'
 import { LibraryDialog } from './components/LibraryDialog'
 import { MaterialPill } from './components/MaterialPill'
 import { OverviewStat } from './components/OverviewStat'
+import { ShareDialog, type ShareDraft } from './components/ShareDialog'
 import {
   createLaminateCollection,
   deleteCollection,
@@ -22,13 +23,19 @@ import {
   listCarpenterScenes,
   listCollectionProducts,
   listLaminateCollections,
+  listShareClients,
+  recordShareAttempt,
+  roomName,
+  saveRenderToFiles,
   uploadLaminateProducts,
   type GenerationResult,
   type RoomLibrary,
+  type ShareClient,
   type ShareStats,
 } from './dashboardService'
 import type { Collection, MaterialChoice, MaterialSlot, Product, UploadType } from './dashboardTypes'
 import { classifyUpload, fileToMaterial, productToMaterial } from './materials'
+import { deliverShare, downloadImage, hasShareSheet, sourceTextureUrl } from './renderActions'
 import './DashboardPage.css'
 
 type DashboardPageProps = {
@@ -90,6 +97,16 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const [generationError, setGenerationError] = useState('')
   const [render, setRender] = useState<GenerationResult | null>(null)
   const [renderName, setRenderName] = useState('')
+  // What the latest render was made from; Save to Files stores the laminate beside the render.
+  const [renderSource, setRenderSource] = useState<{ material: MaterialChoice; sceneName: string } | null>(null)
+  // Result actions: download, save to Files, share.
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isSavingToFiles, setIsSavingToFiles] = useState(false)
+  const [savedImageUrl, setSavedImageUrl] = useState<string | null>(null)
+  const [resultNotice, setResultNotice] = useState<ResultNotice | null>(null)
+  const [isShareOpen, setIsShareOpen] = useState(false)
+  const [shareClients, setShareClients] = useState<ShareClient[]>([])
+  const [isLoadingShareClients, setIsLoadingShareClients] = useState(false)
   const [completedRenders, setCompletedRenders] = useState(0)
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
   // What the server most recently charged this account for a render, when known. It corrects the
@@ -122,6 +139,12 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
   const canUpload = capabilities?.canUploadLaminate === true
   const canBrowseLibrary = Boolean(capabilities?.laminateSource && capabilities.laminateSource !== 'none')
   const canOpenFiles = Boolean(capabilities?.filesAccess && capabilities.filesAccess !== 'none')
+  // Result actions follow the account's capabilities, as the API also enforces them.
+  const canDownload = capabilities?.canDownload === true
+  const canSaveToFiles = capabilities?.canSaveToFiles === true
+  const canShare = capabilities?.canShare !== false
+  const canUseShareSheet = capabilities?.share?.deviceShare !== false
+  const canCopyShare = capabilities?.share?.copyMessageFallback !== false
 
   useEffect(() => {
     if (!hidden) document.title = 'Studio · Carpenter Pro'
@@ -502,6 +525,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
     setIsGenerating(true)
     setGenerationError('')
     setCompletedRenders(0)
+    setResultNotice(null)
     let done = 0
     const total = renderCount
     try {
@@ -514,6 +538,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           done += 1
           setRender(result)
           setRenderName(material.name)
+          setRenderSource({ material, sceneName: roomName(room) })
           setCompletedRenders(done)
           setBatchProgress({ done, total })
           setPendingFiles((current) => current.filter((item) => item !== file))
@@ -522,6 +547,7 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
       } else if (primaryMaterial) {
         setRender(await generateCarpenterRender(account.username, primaryMaterial, accentMaterial, room))
         setRenderName(primaryMaterial.name)
+        setRenderSource({ material: primaryMaterial, sceneName: roomName(room) })
         done = 1
         setCompletedRenders(1)
         await refreshCredits()
@@ -540,6 +566,88 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           .then((cost) => { if (cost !== null) setChargedCost(cost) })
           .catch(() => undefined)
       }
+    }
+  }
+
+  /* Result actions */
+
+  const handleDownload = async () => {
+    if (!render?.imageUrl || !canDownload || isDownloading) return
+    setIsDownloading(true)
+    const outcome = await downloadImage(render.imageUrl, renderName)
+    setIsDownloading(false)
+    setResultNotice(outcome === 'downloaded'
+      ? { tone: 'success', message: 'Render downloaded.' }
+      : { tone: 'info', message: 'The render opened in a new tab. Save it from there.' })
+  }
+
+  const handleSaveToFiles = async () => {
+    const imageUrl = render?.imageUrl
+    if (!imageUrl || !canSaveToFiles || isSavingToFiles) return
+    setIsSavingToFiles(true)
+    try {
+      await saveRenderToFiles(account.username, {
+        imageUrl,
+        baseImageUrl: renderSource ? await sourceTextureUrl(renderSource.material) : undefined,
+        sceneName: renderSource?.sceneName ?? roomName(null),
+        creditsUsed: generationCost,
+      })
+      setSavedImageUrl(imageUrl)
+      setResultNotice({
+        tone: 'success',
+        message: 'Saved to Files.',
+        action: canOpenFiles ? { label: 'Open Files', onClick: onOpenFiles } : undefined,
+      })
+    } catch (error) {
+      setResultNotice({ tone: 'error', message: messageFor(error) })
+    } finally {
+      setIsSavingToFiles(false)
+    }
+  }
+
+  const openShare = () => {
+    if (!render?.imageUrl || !canShare) return
+    setIsShareOpen(true)
+    // Refreshed on every open, so a client added by the last share is there to pick.
+    setIsLoadingShareClients(true)
+    listShareClients(account.username)
+      .then(setShareClients)
+      .catch(() => undefined)
+      .finally(() => setIsLoadingShareClients(false))
+  }
+
+  // Shares first (the share sheet only opens straight from the click), then records the attempt.
+  const shareRender = async (draft: ShareDraft) => {
+    const imageUrl = render?.imageUrl
+    if (!imageUrl) return
+    try {
+      const delivery = await deliverShare({
+        text: draft.message || 'Carpenter Pro render',
+        url: imageUrl.startsWith('data:') ? undefined : imageUrl,
+        allowShareSheet: canUseShareSheet,
+        allowCopy: canCopyShare,
+      })
+      await recordShareAttempt(account.username, {
+        clientId: draft.clientId,
+        clientName: draft.clientName || undefined,
+        whatsapp: draft.whatsapp || undefined,
+        followUpDate: draft.followUpDate || undefined,
+        generationId: render?.generationId,
+        outgoingMessage: draft.message || undefined,
+        ...delivery,
+      })
+      setIsShareOpen(false)
+      setResultNotice({
+        tone: delivery.status === 'cancelled' ? 'info' : 'success',
+        message: delivery.status === 'cancelled'
+          ? 'Share cancelled. It was recorded as a cancelled attempt.'
+          : `${delivery.channel === 'copy' ? 'Message copied. ' : ''}Share attempt recorded for ${draft.clientName}.`,
+      })
+      // The overview counts share attempts and follow-ups.
+      void getShareStats(account.username).then(setShareStats).catch(() => undefined)
+    } catch (error) {
+      // The dialog shows the message and stays open.
+      throw error instanceof Error ? error : new Error(messageFor(error))
     }
   }
 
@@ -748,7 +856,13 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
             canRetry={canGenerate}
             onRetry={() => confirmRoom(lastRoom.current)}
             onBack={() => setIsStageRequested(false)}
-            onOpenFiles={canOpenFiles ? onOpenFiles : undefined}
+            onDownload={canDownload ? () => void handleDownload() : undefined}
+            isDownloading={isDownloading}
+            onShare={canShare ? openShare : undefined}
+            onSaveToFiles={canSaveToFiles ? () => void handleSaveToFiles() : undefined}
+            saveStatus={isSavingToFiles ? 'saving' : savedImageUrl !== null && savedImageUrl === render?.imageUrl ? 'saved' : 'idle'}
+            notice={resultNotice}
+            onDismissNotice={() => setResultNotice(null)}
           />
         ) : null}
 
@@ -828,6 +942,20 @@ function DashboardPage({ account, hidden = false, onOpenFiles, credits, onCredit
           </div>
         </section>
       </div>
+
+      {/* Kept mounted so it closes with the dialog's exit animation; keyed so each render starts a fresh form. */}
+      {canShare ? (
+        <ShareDialog
+          key={render?.generationId ?? render?.imageUrl ?? 'none'}
+          open={isShareOpen && isStageOpen && stageView === 'result'}
+          onClose={() => setIsShareOpen(false)}
+          clients={shareClients}
+          isLoadingClients={isLoadingShareClients}
+          defaultMessage={account.shareMessagePreset}
+          mode={canUseShareSheet && hasShareSheet() ? 'share' : 'copy'}
+          onShare={shareRender}
+        />
+      ) : null}
 
       {isLibraryOpen ? (
         <LibraryDialog

@@ -26,6 +26,16 @@
   animation: app-rise-in var(--duration-base) var(--ease-out) backwards;
 }
 
+/* Leaving (see Dialog `open`): quicker than entering; `forwards` holds the end state until unmount. */
+.app-dialog-backdrop.is-closing {
+  pointer-events: none;
+  animation: app-fade-out var(--duration-fast) var(--ease-in) forwards;
+}
+
+.app-dialog-backdrop.is-closing .app-dialog {
+  animation: app-sink-out var(--duration-fast) var(--ease-in) forwards;
+}
+
 .app-dialog--sm { --app-dialog-width: 420px; }
 .app-dialog--md { --app-dialog-width: 520px; }
 .app-dialog--lg { --app-dialog-width: 900px; }
@@ -166,6 +176,15 @@
     max-height: calc(100dvh - var(--space-6));
     animation-name: app-sheet-in;
     animation-duration: var(--duration-slow);
+  }
+
+  .app-dialog-backdrop.is-closing .app-dialog {
+    animation-name: app-sheet-out;
+    animation-duration: var(--duration-base);
+  }
+
+  .app-dialog-backdrop.is-closing {
+    animation-duration: var(--duration-base);
   }
 
   .app-dialog-footer {

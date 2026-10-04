@@ -68,7 +68,8 @@ button {
 
 /* ------------------------------------------------------------------- motion */
 /*
- * Motion is enter-only, short and small: elements fade in and travel at most 8px.
+ * Motion is short and small: elements fade in and travel at most 8px. Only dialogs
+ * also animate out, and faster than they came in.
  * Use `backwards` fill so the element's own styles (including transforms) apply
  * once the animation ends.
  */
@@ -99,6 +100,22 @@ button {
 @keyframes app-sheet-in {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: none; }
+}
+
+/* Leaving: overlays fade, dialogs sink a few pixels, sheets slide back down */
+@keyframes app-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes app-sink-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(6px) scale(0.985); }
+}
+
+@keyframes app-sheet-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(24px); }
 }
 
 /* Menus and popovers, scaling from their anchor (set transform-origin) */

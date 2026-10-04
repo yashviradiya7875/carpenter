@@ -8,6 +8,8 @@ export type CarpenterCapabilities = {
    */
   filesAccess?: 'full' | 'unrestricted' | 'laminates' | 'none'
   canShare?: boolean
+  /** How a share may leave the app; each defaults to allowed when the API omits it. */
+  share?: { deviceShare?: boolean; copyMessageFallback?: boolean }
   canDownload?: boolean
   canSaveToFiles?: boolean
   brandingStrip?: boolean
@@ -22,6 +24,8 @@ export type AuthAccount = {
   /** Render resolution tier (`1K` | `2K` | `4K`), set per account by an admin; it decides the cost per render. */
   resolution?: string
   accountStatus?: string
+  /** The account's saved outgoing share message (set with `updateUserProfile`). */
+  shareMessagePreset?: string
   allowedApps?: string[]
   capabilities?: CarpenterCapabilities
   token?: string

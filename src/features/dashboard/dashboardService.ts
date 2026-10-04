@@ -156,6 +156,11 @@ export async function listCarpenterScenes(username: string, options: RequestOpti
   return { categories, scenes }
 }
 
+/** The name a render's room is recorded under. */
+export function roomName(room: RoomSelection | null): string {
+  return room?.kind === 'scene' ? room.scene.name : room ? 'Custom room' : 'Contemporary interior'
+}
+
 /* ------------------------------------------------------------------- render */
 
 /**
@@ -170,10 +175,7 @@ export function generateCarpenterRender(
 ) {
   const data: Record<string, unknown> = {
     username,
-    scene: {
-      name: room?.kind === 'scene' ? room.scene.name : room ? 'Custom room' : 'Contemporary interior',
-      prompt: '',
-    },
+    scene: { name: roomName(room), prompt: '' },
     prompt: '',
     creativeMode: false,
     decorateRoom: false,
@@ -199,4 +201,77 @@ export function generateCarpenterRender(
     data.accentLaminateMimeType = accent.mimeType
   }
   return callApi<GenerationResult, Record<string, unknown>>('generateCarpenter', data)
+}
+
+/**
+ * Saves a finished render to Files. The server keeps a render together with the laminate
+ * it was made from (`baseImageUrl`) and refuses a Manufacturer save without one.
+ * `creditsUsed` only labels the record with what the render cost; saving charges nothing.
+ */
+export function saveRenderToFiles(username: string, render: {
+  imageUrl: string
+  baseImageUrl?: string
+  sceneName: string
+  creditsUsed: number
+}) {
+  return callApi<unknown, {
+    username: string; tool: string; imageUrl: string; baseImageUrl?: string; prompt: string; settings: string; creditsUsed: number
+  }>('saveGeneration', {
+    username,
+    tool: 'CARPENTER',
+    imageUrl: render.imageUrl,
+    baseImageUrl: render.baseImageUrl,
+    prompt: '',
+    settings: JSON.stringify({ kind: 'render', sceneName: render.sceneName }),
+    creditsUsed: render.creditsUsed,
+  })
+}
+
+/* -------------------------------------------------------------------- share */
+
+export type ShareClient = {
+  id: string
+  name: string
+  whatsapp?: string
+  /** `YYYY-MM-DD`. */
+  followUpDate?: string
+}
+
+export type ShareChannel = 'device_share' | 'copy'
+
+export type ShareAttempt = {
+  /** An existing client; omit it and send `clientName` to create one. */
+  clientId?: string
+  clientName?: string
+  whatsapp?: string
+  followUpDate?: string
+  generationId?: string
+  outgoingMessage?: string
+  channel: ShareChannel
+  /** `cancelled` when the device share sheet was dismissed. */
+  status: 'attempted' | 'cancelled'
+}
+
+/** The caller's own clients: the server refuses a share attempt against anyone else's. */
+export async function listShareClients(username: string, options: RequestOptions = {}): Promise<ShareClient[]> {
+  const result = await callApi<unknown, { username: string; limit: number }>('listShareClients', { username, limit: 100 }, options)
+  const rows = Array.isArray(result) ? result : (result as { clients?: unknown } | null)?.clients
+  const clients: ShareClient[] = []
+  for (const item of Array.isArray(rows) ? rows : []) {
+    const record = (typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>
+    const id = text(record.id)
+    const name = text(record.name)
+    const owner = text(record.ownerUsername)
+    if (!id || !name || (owner && owner.toLowerCase() !== username.toLowerCase())) continue
+    clients.push({ id, name, whatsapp: text(record.whatsapp), followUpDate: text(record.followUpDate)?.slice(0, 10) })
+  }
+  return clients
+}
+
+/** Logs a share attempt (never a confirmed delivery) and creates or updates the client. */
+export function recordShareAttempt(username: string, attempt: ShareAttempt) {
+  return callApi<{ success?: boolean; attemptId?: string }, ShareAttempt & { username: string }>(
+    'recordShareAttempt',
+    { username, ...attempt },
+  )
 }

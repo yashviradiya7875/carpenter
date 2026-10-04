@@ -79,13 +79,13 @@ Main semantic tokens, beyond those listed above: `--color-panel` / `-panel-stron
 
 Plain CSS: no animation library. Keyframes, enter utilities and the reduced-motion rule live in `styles/base.css`.
 
-**Rules:** motion is enter-only, fast (80–320ms), small (fades plus at most 8px of travel) and never bouncy or looping (spinners excepted). Exits are instant, so closing never delays focus or state changes.
+**Rules:** motion is fast (80–320ms), small (fades plus at most 8px of travel) and never bouncy or looping (spinners and the generating loader excepted). Elements animate in only; exits are instant, so closing never delays focus or state changes. The one exception is `Dialog`, which can leave with a short fade (150ms) when it is closed through its `open` prop.
 
 | Interaction | Motion | Where |
 |---|---|---|
 | Press | `scale: 0.97`, 80ms (`scale`, not `transform`, so it composes with positioning) | `Button` |
 | Hover / toggle | color transitions, `--duration-fast` | `--transition-colors` everywhere |
-| Dialog | backdrop fades 150ms; panel rises 200ms; slides up as a sheet on phones (320ms) | `Dialog` |
+| Dialog | backdrop fades 150ms; panel rises 200ms; slides up as a sheet on phones (320ms). Closing via `open={false}`: backdrop fades and the panel sinks 6px in 150ms (the sheet slides back down, 200ms) | `Dialog` |
 | Menu | scales in from the trigger corner, 150ms | `Menu` |
 | Tooltip | fades and slides 4px after a 400ms hover delay | `Button tooltip` |
 | Loading | fades in after `--duration-loading-delay` (150ms), so fast responses never flash a spinner | `LoadingState` |
@@ -117,7 +117,7 @@ Animations use `backwards` fill, so an element's own `transform` applies once th
 | `Alert` | Inline feedback | `tone` info/success/warning/error. Errors and warnings use `role="alert"`; others `role="status"`. Optional `title`, `icon`, `onDismiss`. |
 | `EmptyState` | Empty, no-results and no-access states | `icon`, `title`, `description`, `actions`, `compact`, `headingLevel`. |
 | `Field` + `TextInput` / `Select` / `Textarea` | Form controls | `Field` wires the label, hint and error to the control (`id`, `aria-describedby`, `aria-invalid`). `TextInput` supports `startIcon` and `endSlot`. Controls also work without `Field` (give them an `aria-label`). |
-| `Dialog` | Modal content | Portal-rendered. Escape closes the topmost dialog, focus is trapped and restored, the page behind can't scroll. `dismissible={false}` while saving; `onSubmit` makes the panel a `<form>`. Sizes sm 420 / md 520 / lg 900px; a bottom sheet on phones. |
+| `Dialog` | Modal content | Portal-rendered. Escape closes the topmost dialog, focus is trapped and restored, the page behind can't scroll. `dismissible={false}` while saving; `onSubmit` makes the panel a `<form>`. Sizes sm 420 / md 520 / lg 900px; a bottom sheet on phones. Keep it mounted and toggle `open` to close with the exit animation (it is inert while leaving); unmounting it closes at once. |
 | `ConfirmDialog` | Confirm or destructive prompts | `tone="danger"` gives a destructive button and trash icon; focuses Cancel first; `loading`, `error`. |
 
 ### Button

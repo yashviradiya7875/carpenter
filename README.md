@@ -16,7 +16,7 @@ src/
     auth/                   Session storage, account types and account rules (role labels, app access)
   features/
     auth/                   Sign-in / sign-up / recovery UI; authService (API), useSession (session lifecycle)
-    dashboard/              Studio workspace and laminate library; dashboardService (API), materials
+    dashboard/              Studio workspace, laminate library, render result actions (download, share, save to Files); dashboardService (API), materials, renderActions
     files/                  Files (Drive) UI and public share page; filesService (API + normalizers), filesPermissions
     prototype/              Preserved dashboard mock; not part of the app entry
 ```
